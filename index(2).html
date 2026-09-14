@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>WIZARD STONE CHESS</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:wght@500;600;700&family=Noto+Serif+JP:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05080c;color:#eee;font-family:"Noto Serif JP","Yu Mincho","Hiragino Mincho ProN",serif}
+body{
+ background:
+ radial-gradient(circle at 50% 45%,rgba(78,56,38,.65),transparent 36%),
+ linear-gradient(#07111a,#05070a 65%,#090704);
+}
+#ui{position:fixed;inset:0;z-index:20;pointer-events:none}
+.panel,.button,.title,.battle,.bottom,.turn{
+ pointer-events:auto;background:linear-gradient(145deg,rgba(8,17,25,.96),rgba(3,8,13,.92));
+ border:1px solid #bd8b3c;box-shadow:0 8px 28px #0009, inset 0 0 20px #0008;
+}
+.title{
+ position:absolute;top:10px;left:50%;transform:translateX(-50%);
+ min-width:min(510px,65vw);padding:10px 32px;text-align:center;border-radius:18px;
+}
+.title h1{font-family:"Cormorant Garamond","Cinzel","Times New Roman",serif;margin:0;color:#e8c77f;font-size:clamp(25px,4vw,46px);letter-spacing:3px;text-shadow:0 2px 8px #000}
+.title p{margin:2px 0;color:#d5c3a1;font-size:13px}
+.left{position:absolute;left:18px;top:118px;width:230px;padding:14px;border-radius:15px}
+.card{display:flex;align-items:center;gap:12px;border-bottom:1px solid #55452e;padding:8px 0}
+.mini{width:52px;height:70px;display:flex;align-items:center;justify-content:center;font-size:48px}
+.white{color:#e5e0d2;text-shadow:0 4px 4px #000}
+.black{color:#25292b;text-shadow:0 4px 4px #000}
+.crown{margin-left:auto;color:#d8b76d}
+.turn{position:absolute;left:18px;top:330px;border-radius:10px;padding:9px 15px;color:#e9d59f;font-family:"Noto Serif JP","Yu Mincho",serif}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:#29c5ff;box-shadow:0 0 14px #29c5ff;margin-right:8px}
+.right{position:absolute;right:18px;top:110px;width:260px;padding:12px;border-radius:15px}
+.battle{margin-top:10px;border-radius:10px;padding:10px;font-family:"Noto Serif JP","Yu Mincho",serif;font-size:13px;line-height:1.5;color:#e4d7bd}
+.battle img{width:100%;border-radius:7px;display:none}
+.controls{display:flex;gap:9px;margin-top:10px}
+.button{padding:10px 14px;border-radius:12px;color:#f0dfb3;cursor:pointer}
+.button:hover{filter:brightness(1.25)}
+.bottom{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);width:min(520px,58vw);padding:10px 18px;border-radius:14px;text-align:center}
+#pieceInfo{font-family:"Noto Serif JP","Yu Mincho",serif;font-size:14px;color:#eadfc8;line-height:1.55}
+#hintText{font-family:"Noto Serif JP","Yu Mincho",serif;color:#aeb7bf;font-size:12px;margin-top:4px}
+#game{position:fixed;inset:0}
+#flash{
+ position:fixed;inset:0;background:radial-gradient(circle at center,#fff 0,rgba(86,214,255,.5) 8%,transparent 35%);
+ opacity:0;pointer-events:none;z-index:15
+}
+#flash.on{animation:flash .65s ease-out}
+@keyframes flash{0%{opacity:.85}100%{opacity:0}}
+#result{
+ position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.7);
+ opacity:0;z-index:30;padding:24px 36px;border:2px solid #e1bd68;border-radius:18px;
+ background:#06101aee;color:#f3d99a;font-size:30px;text-align:center;box-shadow:0 0 70px #000
+}
+#result.show{animation:result 1.8s both}
+@keyframes result{0%{opacity:0;transform:translate(-50%,-50%) scale(.7)}15%,75%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0}}
+@media(max-width:900px){
+ .left{left:7px;top:90px;width:160px}.right{right:7px;top:90px;width:190px}
+ .turn{left:7px;top:300px}.bottom{width:75vw}
+}
+@media(max-width:650px){
+ .left{display:none}.right{display:none}.title{min-width:75vw;padding:8px 12px}
+ .bottom{bottom:6px;width:90vw}
+}
+#game:after{
+ content:"";position:fixed;inset:0;pointer-events:none;
+ background:radial-gradient(ellipse at center,transparent 48%,rgba(0,0,0,.42) 100%);
+}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="flash"></div>
+<div id="result"></div>
+<div id="ui">
+  <div class="title"><h1>WIZARD STONE CHESS</h1><p>魔法使いのチェス　✦　1人プレイ</p></div>
+  <div class="panel left">
+    <div class="card"><div class="mini white">♕</div><div>あなた（白）</div><span class="crown">♛</span></div>
+    <div class="card"><div class="mini black">♕</div><div>CPU（黒）</div><span class="crown">♛</span></div>
+  </div>
+  <div class="turn"><span class="dot"></span><span id="turnText">あなたのターンです</span></div>
+  <div class="panel right">
+    <div style="color:#e8cf95;font-size:18px">戦闘記録</div>
+    <div id="battleLog" class="battle">駒をクリックして、光るマスへ移動してください。</div>
+    <div class="controls">
+      <button id="hint" class="button">💡 ヒント</button>
+      <button id="reset" class="button">↶ やり直す</button>
+    </div>
+  </div>
+  <div class="bottom">
+    <div id="pieceInfo">駒を選択すると、移動方法がここに表示されます。</div>
+    <div id="hintText">青い円＝移動可能　赤い円＝攻撃可能　｜　クリックで実際に駒を動かせます</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.min.js"></script>
+<script>
+let scene,camera,renderer,raycaster,mouse,clock;
+let boardGroup,piecesGroup,fxGroup;
+let boardState,turn='w',selected=null,busy=false,lastMove=null;
+const squares=[],pieceMeshes=new Map();
+const files='abcdefgh';
+
+const PIECE_NAMES={k:'キング',q:'クイーン',r:'ルーク',b:'ビショップ',n:'ナイト',p:'ポーン'};
+const VALUES={p:1,n:3,b:3,r:5,q:9,k:100};
+const PIECE_DESC={
+ k:'キング　縦・横・斜めに1マス。王を詰ませられないように動かします。',
+ q:'クイーン　縦・横・斜めに何マスでも進めます。',
+ r:'ルーク　縦・横に何マスでも進めます。',
+ b:'ビショップ　斜めに何マスでも進めます。',
+ n:'ナイト　L字に2マス＋1マス。途中の駒を飛び越えられます。',
+ p:'ポーン　前へ1マス。最初だけ2マス進め、斜め前の敵を取れます。'
+};
+function setPieceInfo(code, mode='select'){
+ if(!code){document.getElementById('pieceInfo').textContent='駒を選択すると、移動方法がここに表示されます。';return}
+ const name=PIECE_NAMES[code[1]], desc=PIECE_DESC[code[1]];
+ document.getElementById('pieceInfo').textContent =
+   mode==='move' ? `${name}　${desc}　移動先を選択してください。` : `${name}　${desc}`;
+}
+
+const stoneWhite=0xd9d6ca, stoneBlack=0x34383a;
+
+function init(){
+ scene=new THREE.Scene();
+ scene.fog=new THREE.FogExp2(0x05080b,.022);
+ camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);
+ camera.position.set(0,10.6,13.6); camera.lookAt(0,0.35,0);
+ renderer=new THREE.WebGLRenderer({antialias:true});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);
+ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+ renderer.outputColorSpace=THREE.SRGBColorSpace;
+ document.getElementById('game').appendChild(renderer.domElement);
+ raycaster=new THREE.Raycaster();mouse=new THREE.Vector2();clock=new THREE.Clock();
+ addLights();addHall();createBoard();resetGame();
+ renderer.domElement.addEventListener('pointerdown',onPointer);
+ addEventListener('resize',onResize);
+ document.getElementById('reset').onclick=resetGame;
+ document.getElementById('hint').onclick=hint;
+ animate();
+}
+function addLights(){
+ scene.add(new THREE.AmbientLight(0x7b8790,.9));
+ const key=new THREE.DirectionalLight(0xffe1ae,2.2);key.position.set(-5,11,7);key.castShadow=true;key.shadow.mapSize.set(2048,2048);scene.add(key);
+ [[-7,4,-4],[7,4,-4],[-8,4,5],[8,4,5]].forEach(p=>{
+   const l=new THREE.PointLight(0xff7a28,8,9);l.position.set(...p);scene.add(l);
+ });
+}
+function box(w,h,d,mat,x,y,z,group=scene){
+ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;group.add(m);return m;
+}
+function addHall(){
+ const stone=new THREE.MeshStandardMaterial({color:0x17191b,roughness:.92});
+ const wall=new THREE.MeshStandardMaterial({color:0x0b1116,roughness:1});
+ box(26,.5,24,stone,0,-.6,0);
+ box(26,10,.4,wall,0,4,-7);
+ box(.4,10,24,wall,-12,4,0);box(.4,10,24,wall,12,4,0);
+ for(let x=-10;x<=10;x+=4){
+   box(1.2,8,1.2,stone,x,3.4,-6.6);
+   box(1.5,.5,1.5,stone,x,7.45,-6.6);
+ }
+ // tall gothic-ish window glow
+ const glass=new THREE.MeshBasicMaterial({color:0x16384d,transparent:true,opacity:.55});
+ box(7,6,.12,glass,0,4.6,-6.72);
+ // torches
+ [-9,9].forEach(x=>makeTorch(x,4.1,-5.8));
+}
+function makeTorch(x,y,z){
+ const pole=new THREE.Mesh(new THREE.CylinderGeometry(.08,.12,1.7,8),new THREE.MeshStandardMaterial({color:0x40372d,roughness:.8}));
+ pole.position.set(x,y,z);scene.add(pole);
+ const flame=new THREE.Mesh(new THREE.ConeGeometry(.28,.75,10),new THREE.MeshBasicMaterial({color:0xff7b20}));
+ flame.position.set(x,y+.95,z);flame.scale.y=1.25;scene.add(flame);
+ const glow=new THREE.PointLight(0xff7425,5,5);glow.position.set(x,y+1,z);scene.add(glow);
+}
+function createBoard(){
+ boardGroup=new THREE.Group();piecesGroup=new THREE.Group();fxGroup=new THREE.Group();scene.add(boardGroup,piecesGroup,fxGroup);
+ const frameMat=new THREE.MeshStandardMaterial({color:0x342617,roughness:.72,metalness:.12});
+ box(11.4,.7,11.4,frameMat,0,-.15,0,boardGroup);
+ const dark=new THREE.MeshStandardMaterial({color:0x3b3732,roughness:.75});
+ const light=new THREE.MeshStandardMaterial({color:0xbdb6a5,roughness:.62});
+ for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+   const mat=(r+c)%2?dark:light;
+   const m=box(1.32,.18,1.32,mat,(c-3.5)*1.35,.25,(r-3.5)*1.35,boardGroup);
+   m.userData={r,c,type:'square'};squares.push(m);
+ }
+ // glowing edge
+ const edgeMat=new THREE.MeshStandardMaterial({color:0x6f4c20,roughness:.45,metalness:.55});
+ box(11.1,.12,.15,edgeMat,0,.37,-5.43,boardGroup);
+ box(11.1,.12,.15,edgeMat,0,.37,5.43,boardGroup);
+}
+function resetGame(){
+ boardState=[
+  ['br','bn','bb','bq','bk','bb','bn','br'],
+  ['bp','bp','bp','bp','bp','bp','bp','bp'],
+  [null,null,null,null,null,null,null,null],
+  [null,null,null,null,null,null,null,null],
+  [null,null,null,null,null,null,null,null],
+  [null,null,null,null,null,null,null,null],
+  ['wp','wp','wp','wp','wp','wp','wp','wp'],
+  ['wr','wn','wb','wq','wk','wb','wn','wr']
+ ];
+ turn='w';selected=null;busy=false;lastMove=null;clearPieces();clearFX();renderPieces();updateUI();
+ document.getElementById('battleLog').textContent='駒をクリックして、光るマスへ移動してください。';
+}
+function clearPieces(){while(piecesGroup.children.length)piecesGroup.remove(piecesGroup.children[0])}
+function clearFX(){while(fxGroup.children.length)fxGroup.remove(fxGroup.children[0])}
+function pieceObj(code,r,c){
+ const color=code[0],type=code[1],g=new THREE.Group();
+ g.userData={r,c,code,type,color};
+ const stone=color==='w'?0xd7d0bd:0x303438;
+ const light=color==='w'?0xf0e8d5:0x555b5d;
+ const shadow=color==='w'?0x9f9788:0x1b1e21;
+ const mat=new THREE.MeshStandardMaterial({color:stone,roughness:.9,metalness:.03});
+ const hi=new THREE.MeshStandardMaterial({color:light,roughness:.75,metalness:.04});
+ const dm=new THREE.MeshStandardMaterial({color:shadow,roughness:.96,metalness:.02});
+ const add=(geo,m,x,y,z,rx=0,ry=0,rz=0)=>{const q=new THREE.Mesh(geo,m);q.position.set(x,y,z);q.rotation.set(rx,ry,rz);q.castShadow=true;q.receiveShadow=true;g.add(q);return q};
+ const limb=(x,y,z,sx,sy,sz,rx=0,ry=0,rz=0)=>add(new THREE.CapsuleGeometry(.07,.30,4,8),mat,x,y,z,rx,ry,rz).scale.set(sx,sy,sz);
+ // Every piece is a collection of volumetric meshes — no 2D sprites or flat cutouts.
+ add(new THREE.CylinderGeometry(.43,.53,.16,12),dm,0,.08,0);
+ add(new THREE.CylinderGeometry(.36,.45,.14,12),hi,0,.22,0);
+ add(new THREE.TorusGeometry(.32,.045,8,18),hi,0,.31,0);
+
+ if(type==='p'){
+   // Armored foot soldier with helmet and shield.
+   add(new THREE.ConeGeometry(.29,.55,10),mat,0,.62,0);
+   add(new THREE.BoxGeometry(.40,.12,.25),hi,0,.86,0);
+   limb(-.16,.88,0,.9,.8,.9,0,0,-.12); limb(.16,.88,0,.9,.8,.9,0,0,.12);
+   add(new THREE.SphereGeometry(.20,14,10),mat,0,1.10,0);
+   add(new THREE.ConeGeometry(.26,.28,10),hi,0,1.34,0);
+   add(new THREE.ConeGeometry(.16,.20,8),dm,0,1.48,0);
+   add(new THREE.CylinderGeometry(.035,.05,.48,7),hi,.28,.86,.02,0,0,-.22);
+   add(new THREE.CylinderGeometry(.16,.16,.035,12),hi,.34,.88,.02,Math.PI/2,0,0);
+ }
+ if(type==='n'){
+   // Three-dimensional stone war horse and rider silhouette.
+   add(new THREE.CylinderGeometry(.28,.36,.58,10),mat,0,.72,0,0,0,0);
+   add(new THREE.SphereGeometry(.31,14,10),mat,.02,1.00,-.03);
+   add(new THREE.CylinderGeometry(.18,.24,.68,10),mat,-.04,1.40,-.02,0,0,-.18);
+   add(new THREE.BoxGeometry(.48,.34,.62),mat,-.07,1.80,-.12,0,-.12,-.08);
+   add(new THREE.BoxGeometry(.24,.16,.32),hi,-.07,1.76,-.43);
+   add(new THREE.ConeGeometry(.08,.30,5),hi,-.22,2.08,-.06,0,0,-.18);
+   add(new THREE.ConeGeometry(.08,.30,5),hi,.09,2.08,-.06,0,0,.18);
+   for(let i=0;i<5;i++) add(new THREE.ConeGeometry(.06,.24,5),dm,.16,1.45+i*.11,.02,0,0,-.65);
+   // rider head/helmet rising above the horse
+   add(new THREE.SphereGeometry(.18,12,10),hi,.02,1.98,.04);
+   add(new THREE.ConeGeometry(.21,.25,8),mat,.02,2.17,.04);
+   add(new THREE.CylinderGeometry(.035,.05,.62,7),hi,.33,1.30,.05,0,0,-.12);
+ }
+ if(type==='b'){
+   // Hooded mage with robe folds, arms and staff.
+   add(new THREE.ConeGeometry(.40,.88,12),mat,0,.78,0);
+   add(new THREE.TorusGeometry(.31,.06,8,16),hi,0,.46,0);
+   add(new THREE.SphereGeometry(.23,14,10),dm,0,1.37,0);
+   add(new THREE.ConeGeometry(.37,.50,12),mat,0,1.62,0);
+   limb(-.27,1.10,0,.9,.9,.9,0,0,-.35); limb(.27,1.10,0,.9,.9,.9,0,0,.35);
+   add(new THREE.CylinderGeometry(.035,.045,.95,8),hi,.40,1.12,.02,0,0,-.08);
+   add(new THREE.SphereGeometry(.09,10,8),hi,.44,1.61,.02);
+ }
+ if(type==='r'){
+   // Massive carved fortress tower with battlements.
+   add(new THREE.CylinderGeometry(.39,.48,.70,12),mat,0,.66,0);
+   add(new THREE.BoxGeometry(.72,.18,.72),hi,0,1.02,0);
+   add(new THREE.CylinderGeometry(.36,.36,.48,12),mat,0,1.28,0);
+   add(new THREE.CylinderGeometry(.45,.45,.12,12),hi,0,1.55,0);
+   for(let i=0;i<8;i++){const a=i*Math.PI/4;add(new THREE.BoxGeometry(.16,.24,.20),hi,Math.cos(a)*.31,1.70,Math.sin(a)*.31,0,-a,0)}
+   add(new THREE.BoxGeometry(.18,.42,.18),dm,0,1.98,0);
+ }
+ if(type==='q'){
+   // Tall stone queen with gown, shoulders, face and crown.
+   add(new THREE.ConeGeometry(.43,.92,12),mat,0,.80,0);
+   add(new THREE.TorusGeometry(.35,.055,8,18),hi,0,.50,0);
+   add(new THREE.SphereGeometry(.23,14,10),hi,0,1.43,0);
+   add(new THREE.ConeGeometry(.40,.56,12),mat,0,1.68,0);
+   add(new THREE.TorusGeometry(.30,.05,8,18),hi,0,1.97,0);
+   for(let i=0;i<7;i++){const a=i*Math.PI*2/7;add(new THREE.ConeGeometry(.045,.25,5),hi,Math.cos(a)*.27,2.15,Math.sin(a)*.27,0,0,Math.cos(a)*.25)}
+   limb(-.29,1.06,0,.95,.9,.95,0,0,-.40);limb(.29,1.06,0,.95,.9,.95,0,0,.40);
+ }
+ if(type==='k'){
+   // Broad king statue with shoulders, beard-like front relief and crown.
+   add(new THREE.ConeGeometry(.47,.96,12),mat,0,.80,0);
+   add(new THREE.BoxGeometry(.72,.20,.42),hi,0,1.16,0);
+   add(new THREE.SphereGeometry(.25,14,10),hi,0,1.48,0);
+   add(new THREE.ConeGeometry(.39,.48,12),mat,0,1.72,0);
+   add(new THREE.ConeGeometry(.25,.28,8),dm,0,1.86,-.12);
+   add(new THREE.BoxGeometry(.12,.52,.12),hi,0,2.16,0);
+   add(new THREE.BoxGeometry(.34,.12,.12),hi,0,2.25,0);
+   limb(-.32,1.10,0,1,.9,1,0,0,-.35);limb(.32,1.10,0,1,.9,1,0,0,.35);
+ }
+ const rune=add(new THREE.Mesh(new THREE.TorusGeometry(.29,.018,6,20),new THREE.MeshBasicMaterial({color:color==='w'?0x7bcfff:0xd04a4a,transparent:true,opacity:.30,side:THREE.DoubleSide})),0,.34,0);
+ rune.rotation.x=Math.PI/2;
+ g.position.set((c-3.5)*1.35,.36,(r-3.5)*1.35);
+ g.scale.setScalar(.78);
+ piecesGroup.add(g);
+ pieceMeshes.set(r+','+c,g);
+ return g;
+}
+function renderPieces(){
+ clearPieces();pieceMeshes.clear();
+ for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(boardState[r][c])pieceObj(boardState[r][c],r,c);
+}
+function inb(r,c){return r>=0&&r<8&&c>=0&&c<8}
+function rawMoves(r,c,attack=false){
+
+ const code=boardState[r][c];if(!code)return [];
+ const color=code[0],t=code[1],out=[],add=(rr,cc)=>{if(inb(rr,cc)&&(!boardState[rr][cc]||boardState[rr][cc][0]!==color))out.push([rr,cc])};
+ if(t==='p'){const d=color==='w'?-1:1;if(attack){[-1,1].forEach(dc=>{if(inb(r+d,c+dc))out.push([r+d,c+dc])});return out}
+  if(inb(r+d,c)&&!boardState[r+d][c]){out.push([r+d,c]);const sr=color==='w'?6:1;if(r===sr&&!boardState[r+2*d][c])out.push([r+2*d,c])}
+  [-1,1].forEach(dc=>{if(inb(r+d,c+dc)&&boardState[r+d][c+dc]&&boardState[r+d][c+dc][0]!==color)out.push([r+d,c+dc])});
+ } else if(t==='n'){[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([a,b])=>add(r+a,c+b));
+ } else {
+  let dirs=[];if(t==='b'||t==='q')dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);if(t==='r'||t==='q')dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+  dirs.forEach(([dr,dc])=>{let rr=r+dr,cc=c+dc;while(inb(rr,cc)){if(!boardState[rr][cc])out.push([rr,cc]);else{if(boardState[rr][cc][0]!==color)out.push([rr,cc]);break}rr+=dr;cc+=dc}});
+  if(t==='k')for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++)if(dr||dc)add(r+dr,c+dc);
+ } return out;
+}
+function cloneBoard(){return boardState.map(row=>row.slice())}
+function king(color){for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(boardState[r][c]===color+'k')return[r,c];return null}
+function attacked(r,c,by){for(let rr=0;rr<8;rr++)for(let cc=0;cc<8;cc++)if(boardState[rr][cc]?.[0]===by&&rawMoves(rr,cc,true).some(m=>m[0]===r&&m[1]===c))return true;return false}
+function check(color){const k=king(color);return k?attacked(k[0],k[1],color==='w'?'b':'w'):true}
+function legal(r,c){
+ const p=boardState[r][c];if(!p)return[];
+ const moves=rawMoves(r,c).filter(([rr,cc])=>{
+   const old=cloneBoard();
+   boardState[rr][cc]=p;boardState[r][c]=null;
+   const ok=!check(p[0]);boardState=old;return ok;
+ });
+ // Standard castling for the initial position. The game tracks whether a
+ // king/rook has moved through the board position itself, so only untouched
+ // home pieces can castle.
+ if(p[1]==='k' && !check(p[0])){
+   const row=p[0]==='w'?7:0;
+   if(r===row&&c===4){
+     if(boardState[row][7]===p[0]+'r' && !boardState[row][5] && !boardState[row][6]
+        && !attacked(row,5,p[0]==='w'?'b':'w') && !attacked(row,6,p[0]==='w'?'b':'w'))
+       moves.push([row,6]);
+     if(boardState[row][0]===p[0]+'r' && !boardState[row][1] && !boardState[row][2] && !boardState[row][3]
+        && !attacked(row,3,p[0]==='w'?'b':'w') && !attacked(row,2,p[0]==='w'?'b':'w'))
+       moves.push([row,2]);
+   }
+ }
+ return moves;
+}
+function allMoves(color){const out=[];for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(boardState[r][c]?.[0]===color)for(const to of legal(r,c))out.push({from:[r,c],to,capture:!!boardState[to[0]][to[1]]});return out}
+function squarePosition(r,c){return new THREE.Vector3((c-3.5)*1.35,.5,(r-3.5)*1.35)}
+function movePieceVisual(g,to,duration){
+ const end=squarePosition(to[0],to[1]);const start=g.position.clone();const t0=performance.now();
+ return new Promise(resolve=>{function step(now){let t=Math.min(1,(now-t0)/duration);let e=t*t*(3-2*t);g.position.lerpVectors(start,end,e);g.position.y=.38+Math.sin(Math.PI*e)*.65;if(t<1)requestAnimationFrame(step);else{g.position.copy(end);g.position.y=.38;resolve()}}requestAnimationFrame(step)})
+}
+function battleFX(to){
+ const pos=squarePosition(to[0],to[1]);pos.y=.75;
+ const flash=document.createElement('div');flash.id='flash';document.body.appendChild(flash);flash.classList.add('on');setTimeout(()=>flash.remove(),700);
+ // magical shock ring
+ const ring=new THREE.Mesh(new THREE.RingGeometry(.12,1.0,32),new THREE.MeshBasicMaterial({color:0x5bdcff,transparent:true,opacity:.9,side:THREE.DoubleSide}));
+ ring.rotation.x=-Math.PI/2;ring.position.copy(pos);fxGroup.add(ring);
+ let start=performance.now();
+ function ringAnim(now){let t=Math.min(1,(now-start)/700);ring.scale.setScalar(1+2*t);ring.material.opacity=.9*(1-t);if(t<1)requestAnimationFrame(ringAnim)}
+ requestAnimationFrame(ringAnim);
+ // particles: fire, smoke, stone shards
+ for(let i=0;i<48;i++){
+   const type=i<14?'fire':i<27?'smoke':'stone';
+   let geo,mat;
+   if(type==='fire'){geo=new THREE.ConeGeometry(.07,.25,5);mat=new THREE.MeshBasicMaterial({color:0xff7b22,transparent:true})}
+   else if(type==='smoke'){geo=new THREE.SphereGeometry(.09,7,7);mat=new THREE.MeshBasicMaterial({color:0x858585,transparent:true,opacity:.55})}
+   else {geo=new THREE.BoxGeometry(.08,.12,.08);mat=new THREE.MeshStandardMaterial({color:0xaaa49a,roughness:1})}
+   const q=new THREE.Mesh(geo,mat);q.position.copy(pos);fxGroup.add(q);
+   const v=new THREE.Vector3((Math.random()-.5)*3.8,Math.random()*3.8+.5,(Math.random()-.5)*3.8);
+   const t0=performance.now(),life=850+Math.random()*600;
+   function anim(now){let t=Math.min(1,(now-t0)/life);q.position.x+=v.x*.016;q.position.y+=v.y*.016;v.y-=.07;q.position.z+=v.z*.016;q.rotation.x+=.15;q.rotation.z+=.13;
+     if(type==='smoke'){q.scale.setScalar(1+3*t);q.material.opacity=.55*(1-t)}else if(type==='fire'){q.scale.setScalar(1-t)}
+     if(t<1)requestAnimationFrame(anim);else fxGroup.remove(q)}
+   requestAnimationFrame(anim);
+ }
+}
+async function shakeCamera(){
+ const base=camera.position.clone(),t0=performance.now();
+ return new Promise(resolve=>{
+   function s(now){
+     const t=Math.min(1,(now-t0)/280),a=(1-t)*.16;
+     camera.position.x=base.x+(Math.random()-.5)*a;
+     camera.position.y=base.y+(Math.random()-.5)*a;
+     camera.position.z=base.z+(Math.random()-.5)*a;
+     camera.lookAt(0,.35,0);
+     if(t<1)requestAnimationFrame(s); else {camera.position.copy(base);camera.lookAt(0,.35,0);resolve();}
+   }
+   requestAnimationFrame(s);
+ });
+}
+async function performMove(from,to){
+ busy=true;selected=null;
+ const mover=boardState[from[0]][from[1]],captured=boardState[to[0]][to[1]];
+ const g=pieceMeshes.get(from[0]+','+from[1]);
+ if(captured){
+   const victim=pieceMeshes.get(to[0]+','+to[1]);
+   // attacker lunges into the square
+   if(g){const mid=squarePosition(to[0],to[1]);const start=g.position.clone();mid.y=.48;await movePieceVisual(g,to,360)}
+   battleFX(to);
+   shakeCamera();
+   if(victim){
+     victim.rotation.z=.25;
+     victim.position.y+=.10;
+     victim.scale.multiplyScalar(1.08);
+     setTimeout(()=>{
+       const t0=performance.now(), st=victim.position.clone(), sr=victim.rotation.z;
+       function fall(now){
+         const t=Math.min(1,(now-t0)/260);
+         victim.rotation.z=sr+t*1.0;
+         victim.position.y=st.y + Math.sin(t*Math.PI)*.08 - t*.45;
+         victim.scale.setScalar(1.08*(1-t));
+         if(t<1) requestAnimationFrame(fall);
+         else { victim.visible=false; }
+       }
+       requestAnimationFrame(fall);
+     },220);
+   }
+   if(g){
+     g.rotation.z=-.10;
+     setTimeout(()=>{g.rotation.z=0},260);
+   }
+   const name=PIECE_NAMES[mover[1]],vict=PIECE_NAMES[captured[1]];
+   document.getElementById('battleLog').innerHTML='<b>'+name+'が敵の'+vict+'を攻撃！</b><br>激しい魔法の衝撃で石像が砕け散りました。';
+   await new Promise(r=>setTimeout(r,700));
+ } else if(g) await movePieceVisual(g,to,350);
+ boardState[to[0]][to[1]]=mover;boardState[from[0]][from[1]]=null;
+ // Move the rook as part of castling.
+ if(mover[1]==='k' && Math.abs(to[1]-from[1])===2){
+   const row=from[0];
+   if(to[1]===6){ boardState[row][5]=boardState[row][7]; boardState[row][7]=null; }
+   if(to[1]===2){ boardState[row][3]=boardState[row][0]; boardState[row][0]=null; }
+ }
+ if(mover[1]==='p'&&(to[0]===0||to[0]===7))boardState[to[0]][to[1]]=mover[0]+'q';
+ lastMove={from,to};turn=turn==='w'?'b':'w';renderPieces();busy=false;updateUI();
+ const moves=allMoves(turn);
+ if(!moves.length){const msg=check(turn)?(turn==='b'?'勝利！ チェックメイト':'敗北… チェックメイト'):'引き分け';showResult(msg);return}
+ if(turn==='b')setTimeout(aiMove,650);
+}
+function aiMove(){
+ if(busy||turn!=='b')return;
+ const ms=allMoves('b');if(!ms.length)return;
+ ms.sort((a,b)=>scoreMove(b)-scoreMove(a));
+ performMove(ms[0].from,ms[0].to);
+}
+function scoreMove(m){let s=Math.random()*8;if(m.capture)s+=80+VALUES[boardState[m.to[0]][m.to[1]][1]]*8;s+=10-(Math.abs(3.5-m.to[0])+Math.abs(3.5-m.to[1]));return s}
+function hint(){
+ if(turn!=='w'||busy)return;
+ const ms=allMoves('w');if(!ms.length)return;
+ ms.sort((a,b)=>scoreMove(b)-scoreMove(a));selected=ms[0].from;renderHighlights();
+ document.getElementById('hintText').textContent='ヒント：青く光るマスへ進めます。';
+}
+function renderHighlights(){
+ squares.forEach(s=>{if(s.material.emissive)s.material.emissive.setHex(0);s.scale.set(1,1,1)});
+ if(!selected)return;
+ const [r,c]=selected;
+ const chosen=pieceMeshes.get(r+','+c);if(chosen)chosen.traverse(o=>{if(o.material?.emissive)o.material.emissive.setHex(0x156d8a)});
+ legal(r,c).forEach(([rr,cc])=>{const s=squares.find(x=>x.userData.r===rr&&x.userData.c===cc);if(s){s.material.emissive=new THREE.Color(boardState[rr][cc]?'#a51f1f':'#087aa0');s.material.emissiveIntensity=.8}});
+}
+function updateUI(){
+ document.getElementById('turnText').textContent=turn==='w'?'あなたのターンです':'CPUが考えています…';
+ renderHighlights();
+ if(selected){
+   const p=boardState[selected[0]][selected[1]];
+   setPieceInfo(p,'move');
+ } else {
+   setPieceInfo(null);
+ }
+}
+function onPointer(e){
+ if(busy||turn!=='w')return;
+ const rect=renderer.domElement.getBoundingClientRect();
+ mouse.x=((e.clientX-rect.left)/rect.width)*2-1;
+ mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
+ raycaster.setFromCamera(mouse,camera);
+
+ // First test the visible board squares.
+ const squareHits=raycaster.intersectObjects(squares,false);
+ if(squareHits.length){
+   const s=squareHits[0].object;
+   clickSquare(s.userData.r,s.userData.c);
+   return;
+ }
+
+ // Then test every 3D stone statue. Walk up the hierarchy until the
+ // actual chess-piece Group (which stores r/c) is found.
+ const hits=raycaster.intersectObjects(piecesGroup.children,true);
+ if(!hits.length)return;
+ let o=hits[0].object;
+ while(o && o!==piecesGroup && o.userData?.r==null)o=o.parent;
+ if(o && o!==piecesGroup && o.userData?.r!=null){
+   clickSquare(o.userData.r,o.userData.c);
+ }
+}
+function clickSquare(r,c){
+ if(selected){
+   if(legal(...selected).some(m=>m[0]===r&&m[1]===c)){performMove(selected,[r,c]);return}
+   selected=null;updateUI();
+ }
+ if(boardState[r][c]?.[0]===turn){
+ selected=[r,c];
+ document.getElementById('pieceInfo').textContent=PIECE_NAMES[boardState[r][c][1]]+'　移動先をクリックしてください。';
+ renderHighlights();
+}
+}
+function showResult(t){const el=document.getElementById('result');el.textContent=t;el.className='show'}
+function animate(){requestAnimationFrame(animate);renderer.render(scene,camera)}
+function onResize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)}
+init();
+</script>
+</body>
+</html>
