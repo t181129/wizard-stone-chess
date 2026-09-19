@@ -43,7 +43,7 @@ function showWin(w,t){document.getElementById("wt").textContent=w?"⚔ "+w+"の�
 function info(r,c){let p=board[r][c];if(!p)return;document.getElementById("piece").innerHTML="<b>"+(co(p)=="w"?"白":"黒")+"の"+N[ty(p)]+"</b><br>位置："+String.fromCharCode(97+c)+(8-r)+"<br>駒の種類："+ty(p).toUpperCase()+"<br>青い場所＝移動可能"}
 function play(t){if(!sound)return;try{let A=window.AudioContext||window.webkitAudioContext,a=new A,o=a.createOscillator(),g=a.createGain();o.frequency.value=t=="cap"?75:t=="mate"?50:190;o.connect(g);g.connect(a.destination);g.gain.value=.04;o.start();o.stop(a.currentTime+(t=="mate"?.25:.07))}catch(e){}}
 function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;C.width=W*dpr;C.height=H*dpr;X.setTransform(dpr,0,0,dpr,0,0);draw()}addEventListener("resize",resize);
-function project(x,z,y){const sx=Math.min(W*.045,H*.045);const sy=sx*.68;return{x:W/2+x*sx,y:H*.58+z*sy-y*sx,s:1}}
+function project(x,z,y){const s=Math.min(W,H)*0.035;const boardTop=H*0.16;return{x:W/2+x*s,y:boardTop+(z+8)*s-y*s*0.7,s:1}}
 function poly(points,fill){X.beginPath();points.forEach((p,i)=>i?X.lineTo(p.x,p.y):X.moveTo(p.x,p.y));X.closePath();X.fillStyle=fill;X.fill()}
 function stone(g,x,z,y,sc,dark,t){let p=project(x,z,y),s=p.s*sc;X.save();X.translate(p.x,p.y);X.scale(s*55,s*55);let base=dark?"#3d3e40":"#b8b5ae",hi=dark?"#58595a":"#d2cec5",shade=dark?"#252628":"#77736d";X.shadowColor="#000c";X.shadowBlur=10;X.shadowOffsetY=9;
 function poly2(a,fill=base){X.beginPath();a.forEach((q,i)=>i?X.lineTo(q[0],q[1]):X.moveTo(q[0],q[1]));X.closePath();X.fillStyle=fill;X.fill()}
