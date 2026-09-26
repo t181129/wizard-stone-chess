@@ -20,7 +20,7 @@ button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:whit
 <div class="card right"><b>船内通信</b><div class="small" id="log">探索を開始しました。</div><button class="danger" id="report">🚨 通報</button><button id="meetingBtn">📢 緊急会議</button><button id="ventBtn">🕳️ ベント</button></div>
 <div id="sabotage">⚠️ 緊急サボタージュ！ <span id="sabTime">20</span>秒</div>
 <div class="card bottom"><b>操作</b><div class="small">画面ドラッグ：移動<br>青い端末：タスク<br>死体の近く：通報</div></div>
-<div id="meeting"><div class="box"><h2>緊急会議</h2><p id="meetingText">誰が怪しい？</p><div id="chatlog" class="chatbox"></div><div id="chat"><input id="chatInput" maxlength="40" placeholder="会議チャット…"><button id="chatSend">送信</button></div><div id="votes" class="votes"></div><button id="skip">投票をスキップ</button></div></div>
+<div id="meeting"><div class="box"><h2>緊急会議</h2><p id="meetingText">誰が怪しい？</p><div id="chatlog" class="chatbox"></div><div id="chat"><input id="chatInput" maxlength="40" placeholder="会議チャット…"><button id="chatSend">送信</button></div><div id="votes" class="votes"></div><div id="voteResult" class="result"></div><button id="skip">投票をスキップ</button></div></div>
 <div id="end"><div class="box"><h2 id="endTitle"></h2><p id="endText"></p><button onclick="location.reload()">もう一度プレイ</button></div></div>
 </div>
 <script>
@@ -73,12 +73,20 @@ function openMeeting(reason='会議が始まりました。'){
  people.forEach(q=>{let b=document.createElement('button');b.textContent=q.name;b.onclick=()=>vote(q.id);v.appendChild(b)});
 }
 function vote(id){
- const alive=npcs.filter(q=>q.alive);let target=npcs.find(q=>q.id===id);
- document.getElementById('meeting').style.display='none';meeting=false;
- if(target){kill(target);setLog(target.name+'が追放された。');if(target.role==='impostor'){end('CREW WIN!','インポスターを見つけた！');return}}
- else setLog('投票はスキップされた。');
- checkWin();
- setTimeout(()=>setLog('会議終了。クルーは再び行動開始。'),650);
+ const target=npcs.find(q=>q.id===id);
+ const box=document.getElementById('voteResult');box.textContent='投票集計中…';box.style.display='block';
+ const buttons=[...document.querySelectorAll('#votes button')];buttons.forEach((b,i)=>{b.disabled=true;b.style.transform='scale(.96)'});
+ setTimeout(()=>{
+   const chosen=target?target.name:'スキップ';
+   box.textContent='🗳️ '+chosen+' に投票が集まった！';
+   box.animate([{transform:'scale(.6)',opacity:0},{transform:'scale(1.12)',opacity:1},{transform:'scale(1)',opacity:1}],{duration:700});
+   setTimeout(()=>{
+     document.getElementById('meeting').style.display='none';meeting=false;
+     if(target){kill(target);setLog(target.name+'が追放された。');if(target.role==='impostor'){end('CREW WIN!','インポスターを見つけた！');return}}
+     else setLog('投票はスキップされた。');
+     checkWin();setTimeout(()=>setLog('会議終了。クルーは再び行動開始。'),650);
+   },1200);
+ },900);
 }
 document.getElementById('report').onclick=()=>{if(closestBody())openMeeting('死体が通報されました。');else setLog('近くに通報できる死体がありません。')};
 document.getElementById('meetingBtn').onclick=()=>openMeeting('緊急会議が招集されました。');
