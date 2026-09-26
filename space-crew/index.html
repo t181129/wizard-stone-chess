@@ -40,6 +40,15 @@ const npcs=[
 ];
 let bodies=[];
 let cam={x:0,y:0};
+const aiMemory={};
+function aiInit(q){if(!aiMemory[q.id])aiMemory[q.id]={lastRoom:null,suspect:0,seenImpostor:false,seenBodies:0,taskTarget:0,chatSeed:0};return aiMemory[q.id]}
+function roomOf(q){if(q.x< -160&&q.y<0)return'通信';if(q.x>=-160&&q.x<160&&q.y<0)return'電力';if(q.x>=160&&q.y<0)return'酸素';if(q.x<0)return'エンジン';return'航法'}
+function nearestCrew(q){return npcs.filter(z=>z.alive&&z.role==='crew').sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
+function nearestBodyTo(q){return bodies.slice().sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
+function aiChat(q){const m=aiInit(q);const lines=q.role==='impostor'?['今の動き、少し気になる。','自分はタスクをしていたよ。','死体の場所を確認しよう。','誰か怪しい動きを見た？']:['私は今のところ普通にタスク中。','さっき '+roomOf(q)+' にいたよ。','死体を見つけたら報告しよう。','誰かの行動を見ていた人いる？'];chatMessages.push({n:q.name,t:lines[m.chatSeed++%lines.length]});renderChat()}
+function aiChooseVote(q){const alive=npcs.filter(z=>z.alive&&z.id!==q.id&&z.role!=='impostor');if(!alive.length)return null;const b=nearestBodyTo(q);if(b){const victim=npcs.find(z=>z.name===b.name);if(victim&&victim.role==='crew')return victim.id}return alive.sort((a,b)=>{const sa=Math.hypot(a.x-q.x,a.y-q.y),sb=Math.hypot(b.x-q.x,b.y-q.y);return sa-sb})[0].id}
+function aiMeeting(){if(!aiMode||ended)return;const alive=npcs.filter(q=>q.alive);alive.forEach(q=>{const m=aiInit(q);m.chatSeed++;if(Math.random()<.7)aiChat(q)});setTimeout(()=>{if(!meeting||ended)return;const voter=alive.find(q=>q.role==='crew');if(voter){const id=aiChooseVote(voter);if(id!==null){const t=npcs.find(z=>z.id===id);if(t){chatMessages.push({n:voter.name,t:t.name+'が少し怪しいと思う。'});renderChat()}}}},700)}
+
 function multiLog(t){const e=document.getElementById('multiStatus');if(e)e.textContent=t}
 function makeCode(){return Math.random().toString(36).slice(2,8).toUpperCase()}
 function connectPlayer(conn){
@@ -106,7 +115,7 @@ function closestBody(){let b=null,bd=999;for(const q of bodies){let z=Math.hypot
 function checkWin(){if(done>=tasks.length){end('CREW WIN!','全タスク完了！');return true}if(npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','インポスターがクルーを上回った！');return true}return false}
 function renderChat(){const el=document.getElementById('chatlog');el.innerHTML=chatMessages.map(m=>'<div class="chatline"><b>'+m.n+'</b>：'+m.t+'</div>').join('');el.scrollTop=el.scrollHeight}
 function openMeeting(reason='会議が始まりました。'){
- if(ended)return;meeting=true;document.getElementById('meetingText').textContent=reason;document.getElementById('meeting').style.display='flex';renderChat();const v=document.getElementById('votes');v.innerHTML='';
+ if(ended)return;meeting=true;document.getElementById('meetingText').textContent=reason;document.getElementById('meeting').style.display='flex';renderChat();if(aiMode)setTimeout(aiMeeting,250);const v=document.getElementById('votes');v.innerHTML='';
  const people=[...npcs.filter(q=>q.alive),...(player.alive?[{id:0,name:'YOU',color:player.color,role:'crew',alive:true}]:[])];
  people.forEach(q=>{let b=document.createElement('button');b.textContent=q.name;b.onclick=()=>vote(q.id);v.appendChild(b)});
 }
@@ -143,7 +152,8 @@ function impostorAttack(q){
  if(target){kill(target);killCooldown=180;setLog(q.name+'のキルクールダウン開始');}
 }
 function moveAI(){
- for(const q of npcs){if(!q.alive)continue;
+ for(const q of npcs){if(!q.alive)continue;const mem=aiInit(q);mem.lastRoom=roomOf(q);
+
   if(q.role==='impostor'){
    if(Math.random()<0.002)sabotageNow();
    let target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-q.x,z.y-q.y)<260);
@@ -151,7 +161,8 @@ function moveAI(){
     if(Math.hypot(q.x-target.x,q.y-target.y)<34){impostorAttack(q);q.x-=8;}
    }else{q.x+=Math.sin(Date.now()/900+q.id)*.5;q.y+=Math.cos(Date.now()/1000+q.id)*.5}
   }else{
-   let t=tasks[Math.min(done,tasks.length-1)];let dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.5;q.y+=dy/L*.5;
+   let targetTask=tasks[Math.min((done+q.id)%tasks.length,tasks.length-1)];
+   let t=targetTask;let dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.5;q.y+=dy/L*.5;
   }
  }
 }
