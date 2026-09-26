@@ -1,96 +1,99 @@
 <!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Space Crew</title>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Space Crew</title>
 <style>
-*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#071018;color:#fff;font-family:system-ui,sans-serif}
-canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
-#ui{position:fixed;inset:0;pointer-events:none}
-.title{position:absolute;top:12px;left:50%;transform:translateX(-50%);font-weight:800;letter-spacing:.08em;text-shadow:0 3px 8px #000;font-size:clamp(22px,5vw,36px)}
-.card{position:absolute;left:12px;top:12px;background:#08111ddd;border:1px solid #496273;border-radius:12px;padding:10px;pointer-events:auto;min-width:145px}
-#task{top:auto;bottom:12px}
-button{border:0;border-radius:9px;padding:9px 12px;background:#1c6b91;color:#fff;font-weight:700}
-.small{font-size:12px;color:#b9cbd4;margin-top:5px}
-#win{display:none;position:absolute;inset:0;place-items:center;background:#0009;pointer-events:auto}
-.box{background:#0a141b;border:1px solid #66808e;border-radius:18px;padding:28px;text-align:center;width:min(360px,88vw)}
-h2{margin:0 0 8px}
-</style>
-</head>
-<body>
-<canvas id="game"></canvas>
-<div id="ui">
- <div class="title">SPACE CREW</div>
- <div class="card"><b id="status">タスク 0 / 5</b><div class="small">青い端末に近づいてタスク</div></div>
- <div id="task" class="card"><b>操作</b><div class="small">画面をドラッグして移動<br>赤い人物には注意！</div></div>
- <div id="win"><div class="box"><h2 id="result"></h2><p id="reason"></p><button onclick="location.reload()">もう一度</button></div></div>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#061018;color:#fff;font-family:system-ui,sans-serif}canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+#ui{position:fixed;inset:0;pointer-events:none}.top{position:absolute;top:10px;left:50%;transform:translateX(-50%);font-weight:900;font-size:clamp(22px,5vw,34px);text-shadow:0 3px 8px #000}
+.card{position:absolute;left:10px;top:10px;background:#07121bdd;border:1px solid #526a77;border-radius:12px;padding:10px;min-width:175px;pointer-events:auto}.right{left:auto;right:10px}.bottom{top:auto;bottom:10px}
+button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:white;font-weight:800;margin:3px 0}.danger{background:#b52d38}.small{font-size:12px;color:#bfd0d8;line-height:1.45}
+#meeting,#end{display:none;position:absolute;inset:0;background:#000b;pointer-events:auto;align-items:center;justify-content:center}.box{width:min(430px,92vw);max-height:90vh;overflow:auto;background:#0a151c;border:1px solid #617c8a;border-radius:18px;padding:20px;text-align:center}.votes{display:grid;grid-template-columns:1fr 1fr;gap:7px}.votes button{background:#253e4b}.selected{outline:3px solid #5bd0ff}.hidden{display:none}
+.bar{height:9px;background:#1a2930;border-radius:9px;overflow:hidden;margin-top:5px}.fill{height:100%;width:0;background:#31b6e8}
+</style></head><body>
+<canvas id="game"></canvas><div id="ui">
+<div class="top">SPACE CREW</div>
+<div class="card"><b id="status">タスク 0 / 5</b><div class="bar"><div id="fill" class="fill"></div></div><div class="small" id="role">役職：クルー</div></div>
+<div class="card right"><b>船内通信</b><div class="small" id="log">探索を開始しました。</div><button class="danger" id="report">🚨 通報</button><button id="meetingBtn">📢 緊急会議</button></div>
+<div class="card bottom"><b>操作</b><div class="small">画面ドラッグ：移動<br>青い端末：タスク<br>死体の近く：通報</div></div>
+<div id="meeting"><div class="box"><h2>緊急会議</h2><p id="meetingText">誰が怪しい？</p><div id="votes" class="votes"></div><button id="skip">投票をスキップ</button></div></div>
+<div id="end"><div class="box"><h2 id="endTitle"></h2><p id="endText"></p><button onclick="location.reload()">もう一度プレイ</button></div></div>
 </div>
 <script>
-const c=document.getElementById('game'),x=c.getContext('2d');let W,H,d=1;
-let player={x:0,y:0,color:'#36a9df'},tasks=[[-380,-190],[-80,-220],[300,-140],[-280,180],[220,180]],done=0;
-let npcs=[
-{x:-170,y:-40,color:'#ef4b4b',role:'impostor',alive:true},
-{x:150,y:-20,color:'#f2c94c',role:'crew',alive:true},
-{x:-40,y:110,color:'#a66cff',role:'crew',alive:true},
-{x:360,y:100,color:'#35c978',role:'crew',alive:true},
-{x:-350,y:60,color:'#ff7c3e',role:'crew',alive:true}
+const c=document.getElementById('game'),x=c.getContext('2d');let W,H,d=1,drag=false,last={x:0,y:0},meeting=false,ended=false,killCooldown=0,aiTimer=0;
+const player={x:0,y:0,color:'#36a9df',alive:true};
+const tasks=[[-380,-190,'通信'],[-80,-220,'電力'],[300,-140,'酸素'],[-280,180,'エンジン'],[220,180,'航法']];
+let done=0;
+const npcs=[
+{id:1,name:'レッド',x:-170,y:-40,color:'#ef4b4b',role:'impostor',alive:true,target:null},
+{id:2,name:'イエロー',x:150,y:-20,color:'#f2c94c',role:'crew',alive:true,target:null},
+{id:3,name:'パープル',x:-40,y:110,color:'#a66cff',role:'crew',alive:true,target:null},
+{id:4,name:'グリーン',x:360,y:100,color:'#35c978',role:'crew',alive:true,target:null},
+{id:5,name:'オレンジ',x:-350,y:60,color:'#ff7c3e',role:'crew',alive:true,target:null}
 ];
-let cam={x:0,y:0},drag=false,last={x:0,y:0},cool=0;
+let bodies=[];
+let cam={x:0,y:0};
 function resize(){d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*d;c.height=H*d;x.setTransform(d,0,0,d,0,0)}addEventListener('resize',resize);resize();
-function sx(wx){return wx-cam.x+W/2} function sy(wy){return wy-cam.y+H/2}
-function roundRect(px,py,w,h,r,fill){x.fillStyle=fill;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
-function person(q,me=false){
- const px=sx(q.x),py=sy(q.y),s=42;
- // feet/body/head: no arms/hands, face completely hidden behind glass
- x.save();x.translate(px,py);
- x.fillStyle='#18242b';x.beginPath();x.ellipse(0,25,27,10,0,0,7);x.fill();
+function sx(a){return a-cam.x+W/2}function sy(a){return a-cam.y+H/2}function rr(px,py,w,h,r,f){x.fillStyle=f;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
+function person(q,label=true){
+ const px=sx(q.x),py=sy(q.y);x.save();x.translate(px,py);
+ x.fillStyle='#111c22';x.beginPath();x.ellipse(0,25,27,10,0,0,7);x.fill();
  x.fillStyle=q.color;x.beginPath();x.moveTo(-22,15);x.lineTo(-18,-17);x.quadraticCurveTo(-15,-38,0,-42);x.quadraticCurveTo(15,-38,18,-17);x.lineTo(22,15);x.quadraticCurveTo(10,25,0,24);x.quadraticCurveTo(-10,25,-22,15);x.fill();
- // dark glass, no face
- x.fillStyle='#07141c';x.beginPath();x.ellipse(0,-29,16,12,0,0,7);x.fill();
- x.fillStyle='#284d60';x.beginPath();x.ellipse(-3,-32,11,5,0,0,7);x.fill();
- x.globalAlpha=.35;x.fillStyle='#bcecff';x.beginPath();x.ellipse(-6,-35,6,2,0,0,7);x.fill();x.globalAlpha=1;
- // backpack
- x.fillStyle='#24323a';x.fillRect(-28,-8,7,25);x.fillRect(21,-8,7,25);
- // legs
- x.fillStyle='#202d34';x.fillRect(-15,12,11,14);x.fillRect(4,12,11,14);
- x.restore();
+ x.fillStyle='#07151d';x.beginPath();x.ellipse(0,-29,16,12,0,0,7);x.fill();x.fillStyle='#31596a';x.beginPath();x.ellipse(-3,-32,11,5,0,0,7);x.fill();
+ x.globalAlpha=.3;x.fillStyle='#d5f6ff';x.beginPath();x.ellipse(-6,-35,6,2,0,0,7);x.fill();x.globalAlpha=1;
+ x.fillStyle='#26343b';x.fillRect(-28,-8,7,25);x.fillRect(21,-8,7,25);x.fillRect(-15,12,11,14);x.fillRect(4,12,11,14);x.restore();
+ if(label){x.fillStyle='#fff';x.font='bold 12px system-ui';x.textAlign='center';x.fillText(q.name||'YOU',px,py+48)}
 }
-function task(t){let px=sx(t[0]),py=sy(t[1]);roundRect(px-22,py-22,44,44,9,'#1688c7');x.fillStyle='#bff2ff';x.fillRect(px-11,py-7,22,14);x.fillStyle='#fff';x.fillRect(px-6,py-4,12,2)}
+function terminal(t){let px=sx(t[0]),py=sy(t[1]);rr(px-22,py-22,44,44,9,'#1388c3');x.fillStyle='#d8f8ff';x.fillRect(px-12,py-8,24,16);x.fillStyle='#14749d';x.fillRect(px-7,py-4,14,3)}
 function draw(){
- x.clearRect(0,0,W,H);x.fillStyle='#071018';x.fillRect(0,0,W,H);
- // ship
- roundRect(sx(-520),sy(-310),1040,620,40,'#17252d');
- roundRect(sx(-490),sy(-280),980,560,30,'#24353e');
- // rooms
- [[-450,-250,250,190],[-170,-250,300,190],[160,-250,300,190],[-450,-30,300,260],[-110,-30,300,260],[230,-30,230,260]].forEach(r=>{roundRect(sx(r[0]),sy(r[1]),r[2],r[3],20,'#1a2931');x.strokeStyle='#405661';x.lineWidth=3;x.stroke()});
- tasks.forEach((t,i)=>{if(i>=done)task(t)});
- npcs.forEach(q=>{if(q.alive)person(q)});
- person(player,true);
- x.fillStyle='#fff';x.font='bold 13px system-ui';x.textAlign='center';x.fillText('YOU',sx(player.x),sy(player.y)+55);
- if(cool>0)cool--;
+ x.clearRect(0,0,W,H);x.fillStyle='#061018';x.fillRect(0,0,W,H);
+ rr(sx(-520),sy(-310),1040,620,40,'#14242c');rr(sx(-490),sy(-280),980,560,30,'#263943');
+ [[-450,-250,250,190],[-170,-250,300,190],[160,-250,300,190],[-450,-30,300,260],[-110,-30,300,260],[230,-30,230,260]].forEach(r=>{rr(sx(r[0]),sy(r[1]),r[2],r[3],20,'#1a2a33');x.strokeStyle='#405864';x.lineWidth=3;x.stroke()});
+ tasks.forEach((t,i)=>{if(i>=done)terminal(t)});
+ npcs.forEach(q=>{if(q.alive)person(q)});bodies.forEach(q=>{x.fillStyle='#7d252d';x.beginPath();x.arc(sx(q.x),sy(q.y),15,0,7);x.fill();x.fillStyle='#ff9a9a';x.fillRect(sx(q.x)-4,sy(q.y)-3,8,6)});
+ if(player.alive)person({...player,name:'YOU'});
 }
-function dist(a,b){return Math.hypot(a.x-b[0],a.y-b[1])}
-function update(){
- if(done<5){
-  for(let i=0;i<npcs.length;i++){
-   let q=npcs[i];if(!q.alive)continue;
-   let target=i===0?player:tasks[i%tasks.length];
-   let dx=(target.x??target[0])-q.x,dy=(target.y??target[1])-q.y,L=Math.hypot(dx,dy)||1;
-   q.x+=dx/L*.45;q.y+=dy/L*.45;
-   if(q.role==='impostor'&&Math.hypot(q.x-player.x,q.y-player.y)<38&&cool===0){
-     cool=180;document.getElementById('result').textContent='GAME OVER';document.getElementById('reason').textContent='赤い宇宙服の人物に捕まった！';document.getElementById('win').style.display='grid';return;
-   }
+function distXY(a,b){return Math.hypot(a.x-b[0],a.y-b[1])}
+function setLog(s){document.getElementById('log').textContent=s}
+function end(title,text){ended=true;document.getElementById('endTitle').textContent=title;document.getElementById('endText').textContent=text;document.getElementById('end').style.display='flex'}
+function kill(q){q.alive=false;bodies.push({x:q.x,y:q.y});setLog(q.name+'が倒れている…');}
+function closestBody(){let b=null,bd=999;for(const q of bodies){let z=Math.hypot(player.x-q.x,player.y-q.y);if(z<bd){bd=z;b=q}}return bd<70?b:null}
+function checkWin(){if(done>=tasks.length){end('CREW WIN!','全タスク完了！');return true}if(npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','インポスターがクルーを上回った！');return true}return false}
+function openMeeting(reason='会議が始まりました。'){
+ if(ended)return;meeting=true;document.getElementById('meetingText').textContent=reason;document.getElementById('meeting').style.display='flex';const v=document.getElementById('votes');v.innerHTML='';
+ const people=[...npcs.filter(q=>q.alive),...(player.alive?[{id:0,name:'YOU',color:player.color,role:'crew',alive:true}]:[])];
+ people.forEach(q=>{let b=document.createElement('button');b.textContent=q.name;b.onclick=()=>vote(q.id);v.appendChild(b)});
+}
+function vote(id){
+ const alive=npcs.filter(q=>q.alive);let target=npcs.find(q=>q.id===id);
+ document.getElementById('meeting').style.display='none';meeting=false;
+ if(target){kill(target);setLog(target.name+'が追放された。');if(target.role==='impostor'){end('CREW WIN!','インポスターを見つけた！');return}}
+ else setLog('投票はスキップされた。');
+ checkWin();
+}
+document.getElementById('report').onclick=()=>{if(closestBody())openMeeting('死体が通報されました。');else setLog('近くに通報できる死体がありません。')};
+document.getElementById('meetingBtn').onclick=()=>openMeeting('緊急会議が招集されました。');
+document.getElementById('skip').onclick=()=>{document.getElementById('meeting').style.display='none';meeting=false;setLog('投票をスキップしました。')};
+function moveAI(){
+ for(const q of npcs){if(!q.alive)continue;
+  if(q.role==='impostor'){
+   let target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-q.x,z.y-q.y)<260);
+   if(target){let dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.75;q.y+=dy/L*.75;
+    if(Math.hypot(q.x-target.x,q.y-target.y)<34){kill(target);q.x-=8;setLog('誰かがいなくなった…');}
+   }else{q.x+=Math.sin(Date.now()/900+q.id)*.5;q.y+=Math.cos(Date.now()/1000+q.id)*.5}
+  }else{
+   let t=tasks[Math.min(done,tasks.length-1)];let dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.5;q.y+=dy/L*.5;
   }
-  tasks.forEach((t,i)=>{if(i===done&&dist(player,t)<48){done++;document.getElementById('status').textContent='タスク '+done+' / 5';}});
-  if(done===5){document.getElementById('result').textContent='MISSION COMPLETE';document.getElementById('reason').textContent='5つのタスクをすべて完了！';document.getElementById('win').style.display='grid'}
  }
- draw();requestAnimationFrame(update);
 }
-c.addEventListener('pointerdown',e=>{drag=true;last.x=e.clientX;last.y=e.clientY});
-c.addEventListener('pointermove',e=>{if(!drag)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;player.x+=dx*.9;player.y+=dy*.9;player.x=Math.max(-450,Math.min(450,player.x));player.y=Math.max(-250,Math.min(250,player.y));cam.x=player.x;cam.y=player.y;last.x=e.clientX;last.y=e.clientY});
+function update(){
+ if(!ended&&!meeting&&player.alive){
+  if(aiTimer++%15===0)moveAI();
+  if(killCooldown>0)killCooldown--;
+  if(done<tasks.length&&distXY(player,tasks[done])<52){done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog(tasks[done-1][2]+'タスク完了！');checkWin()}
+  let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(imp&&Math.hypot(imp.x-player.x,imp.y-player.y)<35&&killCooldown===0){player.alive=false;end('IMPOSTOR WIN!','インポスターに捕まった！')}
+ }
+ draw();requestAnimationFrame(update)
+}
+c.addEventListener('pointerdown',e=>{if(ended||meeting)return;drag=true;last={x:e.clientX,y:e.clientY}});
+c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;player.x=Math.max(-450,Math.min(450,player.x+dx*.9));player.y=Math.max(-250,Math.min(250,player.y+dy*.9));cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
 c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
 update();
-</script>
-</body>
-</html>
+</script></body></html>
