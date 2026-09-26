@@ -17,14 +17,16 @@ button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:whit
 <canvas id="game"></canvas><div id="ui">
 <div class="top">SPACE CREW</div>
 <div class="card"><b id="status">タスク 0 / 5</b><div class="bar"><div id="fill" class="fill"></div></div><div class="small" id="role">役職：クルー</div></div>
-<div class="card right"><b>船内通信</b><div class="small" id="log">探索を開始しました。</div><button class="danger" id="report">🚨 通報</button><button id="meetingBtn">📢 緊急会議</button><button id="ventBtn">🕳️ ベント</button></div>
+<div class="card right"><b>船内通信</b><div id="multiStatus" class="small">👥 マルチプレイ：未接続</div><div id="multiPanel" style="margin:5px 0"><input id="roomCode" maxlength="6" placeholder="部屋コード" style="width:90px;padding:7px;border-radius:7px;border:1px solid #526a77;background:#08151c;color:#fff;text-transform:uppercase"><button id="hostBtn">部屋を作る</button><button id="joinBtn">参加</button></div><div class="small" id="log">探索を開始しました。</div><button class="danger" id="report">🚨 通報</button><button id="meetingBtn">📢 緊急会議</button><button id="ventBtn">🕳️ ベント</button></div>
 <div id="sabotage">⚠️ 緊急サボタージュ！ <span id="sabTime">20</span>秒</div>
 <div class="card bottom"><b>操作</b><div class="small">画面ドラッグ：移動<br>青い端末：タスク<br>死体の近く：通報</div></div>
 <div id="meeting"><div class="box"><h2>緊急会議</h2><p id="meetingText">誰が怪しい？</p><div id="chatlog" class="chatbox"></div><div id="chat"><input id="chatInput" maxlength="40" placeholder="会議チャット…"><button id="chatSend">送信</button></div><div id="votes" class="votes"></div><div id="voteResult" class="result"></div><button id="skip">投票をスキップ</button></div></div>
 <div id="end"><div class="box"><h2 id="endTitle"></h2><p id="endText"></p><button onclick="location.reload()">もう一度プレイ</button></div></div>
 </div>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 const c=document.getElementById('game'),x=c.getContext('2d');let W,H,d=1,drag=false,last={x:0,y:0},meeting=false,ended=false,killCooldown=0,aiTimer=0,sabotage=false,sabLeft=0,vented=false,chatMessages=[],ghost=false,activeTask=null,taskStage=0,doors=[],taskMiniOpen=false;
+let peer=null,hostConn=null,connections=[],isHost=false,multi=false,remotePlayers={},myPlayerId='p'+Math.random().toString(36).slice(2,7),roomCode='';
 const player={x:0,y:0,color:'#36a9df',alive:true};
 const tasks=[[-380,-190,'通信'],[-80,-220,'電力'],[300,-140,'酸素'],[-280,180,'エンジン'],[220,180,'航法']];
 let done=0;
@@ -38,6 +40,30 @@ const npcs=[
 ];
 let bodies=[];
 let cam={x:0,y:0};
+function multiLog(t){const e=document.getElementById('multiStatus');if(e)e.textContent=t}
+function makeCode(){return Math.random().toString(36).slice(2,8).toUpperCase()}
+function connectPlayer(conn){
+ conn.on('open',()=>{connections.push(conn);multi=true;multiLog('👥 接続中：'+connections.length+'人');conn.send({type:'welcome',id:myPlayerId,player:{x:player.x,y:player.y,color:player.color,name:'PLAYER'}});broadcastState()});
+ conn.on('data',handleNet);conn.on('close',()=>{connections=connections.filter(c=>c!==conn);multiLog('👥 接続中：'+connections.length+'人')});
+}
+function broadcast(msg){connections=connections.filter(c=>c&&c.open);connections.forEach(c=>c.send(msg))}
+function broadcastState(){if(!isHost)return;broadcast({type:'state',players:remotePlayers,done,bodies:bodies.map(b=>({x:b.x,y:b.y,color:b.color,name:b.name})),sabotage,doors})}
+function handleNet(m){
+ if(m.type==='welcome'&&!isHost){multi=true;hostConn=hostConn||this;myPlayerId=m.id||myPlayerId;multiLog('👥 ホストに接続しました');return}
+ if(m.type==='player'&&isHost){remotePlayers[m.id]={x:m.x,y:m.y,color:m.color,name:m.name||'PLAYER',alive:m.alive!==false};return}
+ if(m.type==='task'&&isHost){if(m.index===done){done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';checkWin();broadcastState()}return}
+ if(m.type==='state'&&!isHost){remotePlayers=m.players||{};done=m.done||0;bodies=m.bodies||[];sabotage=!!m.sabotage;doors=m.doors||[];document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';return}
+}
+function startHost(){
+ if(peer)return;roomCode=makeCode();document.getElementById('roomCode').value=roomCode;isHost=true;multi=true;peer=new Peer(roomCode);multiLog('👥 部屋コード：'+roomCode+'（友だちに入力してもらう）');
+ peer.on('open',id=>{multiLog('👥 部屋コード：'+id+'　参加者を待機中')});peer.on('connection',connectPlayer);peer.on('error',e=>multiLog('接続エラー：'+e.type));
+}
+function joinRoom(){
+ if(peer)return;roomCode=document.getElementById('roomCode').value.trim().toUpperCase();if(roomCode.length<4){multiLog('⚠️ 部屋コードを入力');return}peer=new Peer();peer.on('open',()=>{hostConn=peer.connect(roomCode,{reliable:true});connectPlayer(hostConn)});peer.on('error',e=>multiLog('⚠️ 接続できません：'+e.type));
+}
+document.getElementById('hostBtn').onclick=startHost;document.getElementById('joinBtn').onclick=joinRoom;
+function sendLocal(){if(!multi)return;const msg={type:'player',id:myPlayerId,x:player.x,y:player.y,color:player.color,alive:player.alive,name:'PLAYER'};if(isHost){remotePlayers[myPlayerId]=msg;broadcastState()}else if(hostConn&&hostConn.open)hostConn.send(msg)}
+setInterval(sendLocal,100);
 const vents=[[-390,-120],[-40,-120],[330,-120],[-300,120],[120,120],[390,170]];
 const sabotageTargets=[['通信',-380,-190],['電力',-80,-220],['酸素',300,-140]];
 const roles=[['クルー','タスクを完了する'],['技術員','ベントを短時間だけ使用できる'],['監視員','会議で追加情報を得る'],['インポスター','クルーを減らし妨害する']];
@@ -68,7 +94,7 @@ function draw(){
  rr(sx(-520),sy(-310),1040,620,40,'#14242c');rr(sx(-490),sy(-280),980,560,30,'#263943');
  [[-450,-250,250,190],[-170,-250,300,190],[160,-250,300,190],[-450,-30,300,260],[-110,-30,300,260],[230,-30,230,260]].forEach(r=>{rr(sx(r[0]),sy(r[1]),r[2],r[3],20,'#1a2a33');x.strokeStyle='#405864';x.lineWidth=3;x.stroke()});
  tasks.forEach((t,i)=>{if(i>=done)terminal(t)}); vents.forEach((v,i)=>{let px=sx(v[0]),py=sy(v[1]);x.beginPath();x.ellipse(px,py,28,14,0,0,7);x.fillStyle='#111b20';x.fill();x.strokeStyle='#667983';x.lineWidth=3;x.stroke();if(i===0&&sabotage){x.fillStyle='#ff5050';x.globalAlpha=.55;x.beginPath();x.arc(px,py,34,0,7);x.fill();x.globalAlpha=1}});
- npcs.forEach(q=>{if(q.alive)person(q)});doors.forEach(r=>{rr(sx(r[0]),sy(r[1]),r[2],r[3],5,'#b84a3c')});bodies.forEach(q=>drawBody(q));
+ npcs.forEach(q=>{if(q.alive)person(q)});Object.values(remotePlayers).forEach(q=>{if(q.id!==myPlayerId&&q.alive!==false)person({...q,name:q.name||'PLAYER'},true)});doors.forEach(r=>{rr(sx(r[0]),sy(r[1]),r[2],r[3],5,'#b84a3c')});bodies.forEach(q=>drawBody(q));
  if(player.alive)person({...player,name:'YOU'});
 }
 function distXY(a,b){return Math.hypot(a.x-b[0],a.y-b[1])}
@@ -132,7 +158,7 @@ function taskGame(){
  if(!activeTask||meeting||ended)return;
  const ok=Math.random()<.8;if(ok)taskStage++;else setLog('ミス！もう一度操作しよう');
  setLog(activeTask[2]+'：ミニゲーム '+taskStage+'/3');
- if(taskStage>=3){activeTask=null;done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog('タスク完了！');checkWin()}
+ if(taskStage>=3){activeTask=null;const completedIndex=done;done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog('タスク完了！');if(isHost)broadcastState();else if(hostConn&&hostConn.open)hostConn.send({type:'task',index:completedIndex});checkWin()}
 }
 c.addEventListener('click',e=>{if(activeTask&&!meeting&&!ended)taskGame()});
 function closeDoors(){doors=[[-250,-30,120,12],[100,-30,120,12],[0,150,12,90]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
@@ -141,7 +167,7 @@ function update(){
   if(sabotage){if(aiTimer%60===0){sabLeft--;document.getElementById('sabTime').textContent=sabLeft}if(sabLeft<=0){end('IMPOSTOR WIN!','サボタージュを止められなかった！');return}}
   if(sabotage&&tasks.some(t=>Math.hypot(player.x-t[0],player.y-t[1])<48))repairSabotage();
   if(ghost){setLog('👻 ゴーストモード：自由に船内を探索中');}
-  if(aiTimer++%15===0)moveAI();
+  if(aiTimer++%15===0&&(isHost||!multi))moveAI();
   if(killCooldown>0)killCooldown--;
   if(killCooldown===0&&npcs.some(q=>q.role==='impostor'&&q.alive))document.getElementById('log').dataset.ready='1';
   if(done<tasks.length&&distXY(player,tasks[done])<58&&!activeTask){
@@ -150,7 +176,7 @@ function update(){
 if(activeTask&&taskStage>=3){done++;activeTask=null;taskStage=0;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog(tasks[done-1][2]+'タスク完了！');checkWin()}
   let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(!ghost&&!vented&&imp&&Math.hypot(imp.x-player.x,imp.y-player.y)<35&&killCooldown===0){player.alive=false;ghost=true;setLog('👻 ゴーストになった！');}
  }
- draw();requestAnimationFrame(update)
+ if(isHost&&aiTimer%6===0)broadcastState();draw();requestAnimationFrame(update)
 }
 c.addEventListener('pointerdown',e=>{if(ended||meeting)return;drag=true;last={x:e.clientX,y:e.clientY}});
 c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;player.x=Math.max(-450,Math.min(450,player.x+dx*.9));player.y=Math.max(-250,Math.min(250,player.y+dy*.9));cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
