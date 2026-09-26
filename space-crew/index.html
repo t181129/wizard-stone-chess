@@ -24,7 +24,7 @@ button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:whit
 <div id="end"><div class="box"><h2 id="endTitle"></h2><p id="endText"></p><button onclick="location.reload()">もう一度プレイ</button></div></div>
 </div>
 <script>
-const c=document.getElementById('game'),x=c.getContext('2d');let W,H,d=1,drag=false,last={x:0,y:0},meeting=false,ended=false,killCooldown=0,aiTimer=0,sabotage=false,sabLeft=0,vented=false,chatMessages=[];
+const c=document.getElementById('game'),x=c.getContext('2d');let W,H,d=1,drag=false,last={x:0,y:0},meeting=false,ended=false,killCooldown=0,aiTimer=0,sabotage=false,sabLeft=0,vented=false,chatMessages=[],ghost=false,activeTask=null,taskStage=0,doors=[];
 const player={x:0,y:0,color:'#36a9df',alive:true};
 const tasks=[[-380,-190,'通信'],[-80,-220,'電力'],[300,-140,'酸素'],[-280,180,'エンジン'],[220,180,'航法']];
 let done=0;
@@ -40,8 +40,17 @@ let bodies=[];
 let cam={x:0,y:0};
 const vents=[[-390,-120],[-40,-120],[330,-120],[-300,120],[120,120],[390,170]];
 const sabotageTargets=[['通信',-380,-190],['電力',-80,-220],['酸素',300,-140]];
+const roles=[['クルー','タスクを完了する'],['技術員','ベントを短時間だけ使用できる'],['監視員','会議で追加情報を得る'],['インポスター','クルーを減らし妨害する']];
+player.role='技術員';
 function resize(){d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*d;c.height=H*d;x.setTransform(d,0,0,d,0,0)}addEventListener('resize',resize);resize();
 function sx(a){return a-cam.x+W/2}function sy(a){return a-cam.y+H/2}function rr(px,py,w,h,r,f){x.fillStyle=f;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
+function drawBody(q){
+ const px=sx(q.x),py=sy(q.y);x.save();x.translate(px,py);
+ x.fillStyle=q.color;x.beginPath();x.moveTo(-22,15);x.lineTo(-18,-5);x.lineTo(0,2);x.lineTo(18,-5);x.lineTo(22,15);x.quadraticCurveTo(10,25,0,24);x.quadraticCurveTo(-10,25,-22,15);x.fill();
+ x.fillStyle='#27343a';x.fillRect(-15,12,11,14);x.fillRect(4,12,11,14);
+ x.strokeStyle='#e8e8df';x.lineWidth=3;x.beginPath();x.moveTo(-13,-4);x.lineTo(-6,4);x.lineTo(0,-3);x.lineTo(7,4);x.lineTo(14,-4);x.stroke();
+ x.restore();
+}
 function person(q,label=true){
  const px=sx(q.x),py=sy(q.y);x.save();x.translate(px,py);
  x.fillStyle='#111c22';x.beginPath();x.ellipse(0,25,27,10,0,0,7);x.fill();
@@ -51,19 +60,19 @@ function person(q,label=true){
  x.fillStyle='#26343b';x.fillRect(-28,-8,7,25);x.fillRect(21,-8,7,25);x.fillRect(-15,12,11,14);x.fillRect(4,12,11,14);x.restore();
  if(label){x.fillStyle='#fff';x.font='bold 12px system-ui';x.textAlign='center';x.fillText(q.name||'YOU',px,py+48)}
 }
-function terminal(t){let px=sx(t[0]),py=sy(t[1]);rr(px-22,py-22,44,44,9,'#1388c3');x.fillStyle='#d8f8ff';x.fillRect(px-12,py-8,24,16);x.fillStyle='#14749d';x.fillRect(px-7,py-4,14,3)}
+function terminal(t){let px=sx(t[0]),py=sy(t[1]);rr(px-22,py-22,44,44,9,activeTask&&activeTask[2]===t[2]?'#35d28a':'#1388c3');x.fillStyle='#d8f8ff';x.fillRect(px-12,py-8,24,16);x.fillStyle='#14749d';x.fillRect(px-7,py-4,14,3)}
 function draw(){
  x.clearRect(0,0,W,H);x.fillStyle='#061018';x.fillRect(0,0,W,H);
  rr(sx(-520),sy(-310),1040,620,40,'#14242c');rr(sx(-490),sy(-280),980,560,30,'#263943');
  [[-450,-250,250,190],[-170,-250,300,190],[160,-250,300,190],[-450,-30,300,260],[-110,-30,300,260],[230,-30,230,260]].forEach(r=>{rr(sx(r[0]),sy(r[1]),r[2],r[3],20,'#1a2a33');x.strokeStyle='#405864';x.lineWidth=3;x.stroke()});
  tasks.forEach((t,i)=>{if(i>=done)terminal(t)}); vents.forEach((v,i)=>{let px=sx(v[0]),py=sy(v[1]);x.beginPath();x.ellipse(px,py,28,14,0,0,7);x.fillStyle='#111b20';x.fill();x.strokeStyle='#667983';x.lineWidth=3;x.stroke();if(i===0&&sabotage){x.fillStyle='#ff5050';x.globalAlpha=.55;x.beginPath();x.arc(px,py,34,0,7);x.fill();x.globalAlpha=1}});
- npcs.forEach(q=>{if(q.alive)person(q)});bodies.forEach(q=>{x.fillStyle='#7d252d';x.beginPath();x.arc(sx(q.x),sy(q.y),15,0,7);x.fill();x.fillStyle='#ff9a9a';x.fillRect(sx(q.x)-4,sy(q.y)-3,8,6)});
+ npcs.forEach(q=>{if(q.alive)person(q)});doors.forEach(r=>{rr(sx(r[0]),sy(r[1]),r[2],r[3],5,'#b84a3c')});bodies.forEach(q=>drawBody(q));
  if(player.alive)person({...player,name:'YOU'});
 }
 function distXY(a,b){return Math.hypot(a.x-b[0],a.y-b[1])}
 function setLog(s){document.getElementById('log').textContent=s}
 function end(title,text){ended=true;document.getElementById('endTitle').textContent=title;document.getElementById('endText').textContent=text;document.getElementById('end').style.display='flex'}
-function kill(q){q.alive=false;bodies.push({x:q.x,y:q.y});setLog(q.name+'が倒れている…');}
+function kill(q){q.alive=false;bodies.push({x:q.x,y:q.y,color:q.color,name:q.name});setLog(q.name+'が倒れている…');}
 function closestBody(){let b=null,bd=999;for(const q of bodies){let z=Math.hypot(player.x-q.x,player.y-q.y);if(z<bd){bd=z;b=q}}return bd<70?b:null}
 function checkWin(){if(done>=tasks.length){end('CREW WIN!','全タスク完了！');return true}if(npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','インポスターがクルーを上回った！');return true}return false}
 function renderChat(){const el=document.getElementById('chatlog');el.innerHTML=chatMessages.map(m=>'<div class="chatline"><b>'+m.n+'</b>：'+m.t+'</div>').join('');el.scrollTop=el.scrollHeight}
@@ -90,6 +99,7 @@ function vote(id){
 }
 document.getElementById('report').onclick=()=>{if(closestBody())openMeeting('死体が通報されました。');else setLog('近くに通報できる死体がありません。')};
 document.getElementById('meetingBtn').onclick=()=>openMeeting('緊急会議が招集されました。');
+setInterval(()=>{if(!ended&&Math.random()<.18)closeDoors()},7000);
 document.getElementById('skip').onclick=()=>{document.getElementById('meeting').style.display='none';meeting=false;setLog('投票をスキップしました。')};
 document.getElementById('chatSend').onclick=()=>{const input=document.getElementById('chatInput');if(input.value.trim()){chatMessages.push({n:'YOU',t:input.value.trim()});input.value='';renderChat();setTimeout(()=>{if(meeting){const alive=npcs.filter(q=>q.alive);const q=alive[Math.floor(Math.random()*alive.length)];if(q){chatMessages.push({n:q.name,t:['私は怪しいと思う人がいる。','さっき通信室にいたよ。','誰かベントを見た？','証拠を確認しよう。'][Math.floor(Math.random()*4)]});renderChat()}}},500)}};
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('chatSend').click()});
@@ -111,19 +121,31 @@ function moveAI(){
   }
  }
 }
+function taskGame(){
+ if(!activeTask||meeting||ended)return;
+ const ok=Math.random()<.72; if(ok)taskStage++;
+ setLog(activeTask[2]+'：ミニゲーム '+taskStage+'/3');
+}
+c.addEventListener('click',e=>{if(activeTask&&!meeting&&!ended)taskGame()});
+function closeDoors(){doors=[[-250,-30,120,12],[100,-30,120,12],[0,150,12,90]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
 function update(){
- if(!ended&&!meeting&&player.alive){
+ if(!ended&&!meeting&&(player.alive||ghost)){
   if(sabotage){if(aiTimer%60===0){sabLeft--;document.getElementById('sabTime').textContent=sabLeft}if(sabLeft<=0){end('IMPOSTOR WIN!','サボタージュを止められなかった！');return}}
   if(sabotage&&tasks.some(t=>Math.hypot(player.x-t[0],player.y-t[1])<48))repairSabotage();
+  if(ghost){setLog('👻 ゴーストモード：自由に船内を探索中');}
   if(aiTimer++%15===0)moveAI();
   if(killCooldown>0)killCooldown--;
-  if(done<tasks.length&&distXY(player,tasks[done])<52){done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog(tasks[done-1][2]+'タスク完了！');checkWin()}
-  let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(!vented&&imp&&Math.hypot(imp.x-player.x,imp.y-player.y)<35&&killCooldown===0){player.alive=false;end('IMPOSTOR WIN!','インポスターに捕まった！')}
+  if(done<tasks.length&&distXY(player,tasks[done])<58&&!activeTask){
+ activeTask=tasks[done];taskStage=0;document.getElementById('status').textContent='タスク中：'+activeTask[2];setLog(activeTask[2]+'のミニゲーム開始！');
+}
+if(activeTask&&taskStage>=3){done++;activeTask=null;taskStage=0;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog(tasks[done-1][2]+'タスク完了！');checkWin()}
+  let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(!ghost&&!vented&&imp&&Math.hypot(imp.x-player.x,imp.y-player.y)<35&&killCooldown===0){player.alive=false;ghost=true;setLog('👻 ゴーストになった！');}
  }
  draw();requestAnimationFrame(update)
 }
 c.addEventListener('pointerdown',e=>{if(ended||meeting)return;drag=true;last={x:e.clientX,y:e.clientY}});
 c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;player.x=Math.max(-450,Math.min(450,player.x+dx*.9));player.y=Math.max(-250,Math.min(250,player.y+dy*.9));cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
 c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
+document.getElementById('role').textContent='役職：'+player.role+' — '+roles.find(r=>r[0]===player.role)[1];
 update();
 </script></body></html>
