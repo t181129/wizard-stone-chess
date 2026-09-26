@@ -24,7 +24,7 @@ button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:whit
 <div id="end"><div class="box"><h2 id="endTitle"></h2><p id="endText"></p><button onclick="location.reload()">もう一度プレイ</button></div></div>
 </div>
 <script>
-const c=document.getElementById('game'),x=c.getContext('2d');let W,H,d=1,drag=false,last={x:0,y:0},meeting=false,ended=false,killCooldown=0,aiTimer=0,sabotage=false,sabLeft=0,vented=false,chatMessages=[],ghost=false,activeTask=null,taskStage=0,doors=[];
+const c=document.getElementById('game'),x=c.getContext('2d');let W,H,d=1,drag=false,last={x:0,y:0},meeting=false,ended=false,killCooldown=0,aiTimer=0,sabotage=false,sabLeft=0,vented=false,chatMessages=[],ghost=false,activeTask=null,taskStage=0,doors=[],taskMiniOpen=false;
 const player={x:0,y:0,color:'#36a9df',alive:true};
 const tasks=[[-380,-190,'通信'],[-80,-220,'電力'],[300,-140,'酸素'],[-280,180,'エンジン'],[220,180,'航法']];
 let done=0;
@@ -46,9 +46,11 @@ function resize(){d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c
 function sx(a){return a-cam.x+W/2}function sy(a){return a-cam.y+H/2}function rr(px,py,w,h,r,f){x.fillStyle=f;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
 function drawBody(q){
  const px=sx(q.x),py=sy(q.y);x.save();x.translate(px,py);
- x.fillStyle=q.color;x.beginPath();x.moveTo(-22,15);x.lineTo(-18,-5);x.lineTo(0,2);x.lineTo(18,-5);x.lineTo(22,15);x.quadraticCurveTo(10,25,0,24);x.quadraticCurveTo(-10,25,-22,15);x.fill();
+ x.fillStyle=q.color;x.beginPath();x.moveTo(-22,15);x.lineTo(-18,5);x.lineTo(-12,10);x.lineTo(-15,15);x.quadraticCurveTo(-7,24,0,24);x.quadraticCurveTo(7,24,15,15);x.lineTo(12,10);x.lineTo(18,5);x.lineTo(22,15);x.quadraticCurveTo(10,25,0,24);x.quadraticCurveTo(-10,25,-22,15);x.fill();
  x.fillStyle='#27343a';x.fillRect(-15,12,11,14);x.fillRect(4,12,11,14);
- x.strokeStyle='#e8e8df';x.lineWidth=3;x.beginPath();x.moveTo(-13,-4);x.lineTo(-6,4);x.lineTo(0,-3);x.lineTo(7,4);x.lineTo(14,-4);x.stroke();
+ x.strokeStyle='#f4f1dc';x.lineWidth=2.5;x.beginPath();x.moveTo(-13,-7);x.lineTo(-13,9);x.moveTo(-7,-10);x.lineTo(-7,8);x.moveTo(0,-12);x.lineTo(0,10);x.moveTo(7,-10);x.lineTo(7,8);x.moveTo(13,-7);x.lineTo(13,9);x.stroke();
+ x.beginPath();x.moveTo(-15,-7);x.quadraticCurveTo(0,4,15,-7);x.moveTo(-15,0);x.quadraticCurveTo(0,10,15,0);x.stroke();
+ x.fillStyle='#f4f1dc';x.beginPath();x.ellipse(0,-18,10,9,0,0,7);x.fill();x.fillStyle='#27343a';x.fillRect(-5,-20,3,3);x.fillRect(2,-20,3,3);
  x.restore();
 }
 function person(q,label=true){
@@ -108,13 +110,18 @@ function repairSabotage(){if(!sabotage)return;sabotage=false;sabLeft=0;document.
 function useVent(){if(ended||meeting)return;let near=vents.find(v=>Math.hypot(player.x-v[0],player.y-v[1])<55);if(near){vented=!vented;setLog(vented?'ベントに隠れた。':'ベントから出た。');}else setLog('近くにベントがありません。');}
 document.getElementById('ventBtn').onclick=useVent;
 document.getElementById('sabotage').onclick=repairSabotage;
+function impostorAttack(q){
+ if(killCooldown>0)return;
+ const target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-q.x,z.y-q.y)<32);
+ if(target){kill(target);killCooldown=180;setLog(q.name+'のキルクールダウン開始');}
+}
 function moveAI(){
  for(const q of npcs){if(!q.alive)continue;
   if(q.role==='impostor'){
    if(Math.random()<0.002)sabotageNow();
    let target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-q.x,z.y-q.y)<260);
    if(target){let dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.75;q.y+=dy/L*.75;
-    if(Math.hypot(q.x-target.x,q.y-target.y)<34){kill(target);q.x-=8;setLog('誰かがいなくなった…');}
+    if(Math.hypot(q.x-target.x,q.y-target.y)<34){impostorAttack(q);q.x-=8;}
    }else{q.x+=Math.sin(Date.now()/900+q.id)*.5;q.y+=Math.cos(Date.now()/1000+q.id)*.5}
   }else{
    let t=tasks[Math.min(done,tasks.length-1)];let dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.5;q.y+=dy/L*.5;
@@ -123,8 +130,9 @@ function moveAI(){
 }
 function taskGame(){
  if(!activeTask||meeting||ended)return;
- const ok=Math.random()<.72; if(ok)taskStage++;
+ const ok=Math.random()<.8;if(ok)taskStage++;else setLog('ミス！もう一度操作しよう');
  setLog(activeTask[2]+'：ミニゲーム '+taskStage+'/3');
+ if(taskStage>=3){activeTask=null;done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog('タスク完了！');checkWin()}
 }
 c.addEventListener('click',e=>{if(activeTask&&!meeting&&!ended)taskGame()});
 function closeDoors(){doors=[[-250,-30,120,12],[100,-30,120,12],[0,150,12,90]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
@@ -135,6 +143,7 @@ function update(){
   if(ghost){setLog('👻 ゴーストモード：自由に船内を探索中');}
   if(aiTimer++%15===0)moveAI();
   if(killCooldown>0)killCooldown--;
+  if(killCooldown===0&&npcs.some(q=>q.role==='impostor'&&q.alive))document.getElementById('log').dataset.ready='1';
   if(done<tasks.length&&distXY(player,tasks[done])<58&&!activeTask){
  activeTask=tasks[done];taskStage=0;document.getElementById('status').textContent='タスク中：'+activeTask[2];setLog(activeTask[2]+'のミニゲーム開始！');
 }
