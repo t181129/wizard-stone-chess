@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Space Crew</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#071018;color:#fff;font-family:system-ui,sans-serif}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+#ui{position:fixed;inset:0;pointer-events:none}
+.title{position:absolute;top:12px;left:50%;transform:translateX(-50%);font-weight:800;letter-spacing:.08em;text-shadow:0 3px 8px #000;font-size:clamp(22px,5vw,36px)}
+.card{position:absolute;left:12px;top:12px;background:#08111ddd;border:1px solid #496273;border-radius:12px;padding:10px;pointer-events:auto;min-width:145px}
+#task{top:auto;bottom:12px}
+button{border:0;border-radius:9px;padding:9px 12px;background:#1c6b91;color:#fff;font-weight:700}
+.small{font-size:12px;color:#b9cbd4;margin-top:5px}
+#win{display:none;position:absolute;inset:0;place-items:center;background:#0009;pointer-events:auto}
+.box{background:#0a141b;border:1px solid #66808e;border-radius:18px;padding:28px;text-align:center;width:min(360px,88vw)}
+h2{margin:0 0 8px}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui">
+ <div class="title">SPACE CREW</div>
+ <div class="card"><b id="status">タスク 0 / 5</b><div class="small">青い端末に近づいてタスク</div></div>
+ <div id="task" class="card"><b>操作</b><div class="small">画面をドラッグして移動<br>赤い人物には注意！</div></div>
+ <div id="win"><div class="box"><h2 id="result"></h2><p id="reason"></p><button onclick="location.reload()">もう一度</button></div></div>
+</div>
+<script>
+const c=document.getElementById('game'),x=c.getContext('2d');let W,H,d=1;
+let player={x:0,y:0,color:'#36a9df'},tasks=[[-380,-190],[-80,-220],[300,-140],[-280,180],[220,180]],done=0;
+let npcs=[
+{x:-170,y:-40,color:'#ef4b4b',role:'impostor',alive:true},
+{x:150,y:-20,color:'#f2c94c',role:'crew',alive:true},
+{x:-40,y:110,color:'#a66cff',role:'crew',alive:true},
+{x:360,y:100,color:'#35c978',role:'crew',alive:true},
+{x:-350,y:60,color:'#ff7c3e',role:'crew',alive:true}
+];
+let cam={x:0,y:0},drag=false,last={x:0,y:0},cool=0;
+function resize(){d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*d;c.height=H*d;x.setTransform(d,0,0,d,0,0)}addEventListener('resize',resize);resize();
+function sx(wx){return wx-cam.x+W/2} function sy(wy){return wy-cam.y+H/2}
+function roundRect(px,py,w,h,r,fill){x.fillStyle=fill;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
+function person(q,me=false){
+ const px=sx(q.x),py=sy(q.y),s=42;
+ // feet/body/head: no arms/hands, face completely hidden behind glass
+ x.save();x.translate(px,py);
+ x.fillStyle='#18242b';x.beginPath();x.ellipse(0,25,27,10,0,0,7);x.fill();
+ x.fillStyle=q.color;x.beginPath();x.moveTo(-22,15);x.lineTo(-18,-17);x.quadraticCurveTo(-15,-38,0,-42);x.quadraticCurveTo(15,-38,18,-17);x.lineTo(22,15);x.quadraticCurveTo(10,25,0,24);x.quadraticCurveTo(-10,25,-22,15);x.fill();
+ // dark glass, no face
+ x.fillStyle='#07141c';x.beginPath();x.ellipse(0,-29,16,12,0,0,7);x.fill();
+ x.fillStyle='#284d60';x.beginPath();x.ellipse(-3,-32,11,5,0,0,7);x.fill();
+ x.globalAlpha=.35;x.fillStyle='#bcecff';x.beginPath();x.ellipse(-6,-35,6,2,0,0,7);x.fill();x.globalAlpha=1;
+ // backpack
+ x.fillStyle='#24323a';x.fillRect(-28,-8,7,25);x.fillRect(21,-8,7,25);
+ // legs
+ x.fillStyle='#202d34';x.fillRect(-15,12,11,14);x.fillRect(4,12,11,14);
+ x.restore();
+}
+function task(t){let px=sx(t[0]),py=sy(t[1]);roundRect(px-22,py-22,44,44,9,'#1688c7');x.fillStyle='#bff2ff';x.fillRect(px-11,py-7,22,14);x.fillStyle='#fff';x.fillRect(px-6,py-4,12,2)}
+function draw(){
+ x.clearRect(0,0,W,H);x.fillStyle='#071018';x.fillRect(0,0,W,H);
+ // ship
+ roundRect(sx(-520),sy(-310),1040,620,40,'#17252d');
+ roundRect(sx(-490),sy(-280),980,560,30,'#24353e');
+ // rooms
+ [[-450,-250,250,190],[-170,-250,300,190],[160,-250,300,190],[-450,-30,300,260],[-110,-30,300,260],[230,-30,230,260]].forEach(r=>{roundRect(sx(r[0]),sy(r[1]),r[2],r[3],20,'#1a2931');x.strokeStyle='#405661';x.lineWidth=3;x.stroke()});
+ tasks.forEach((t,i)=>{if(i>=done)task(t)});
+ npcs.forEach(q=>{if(q.alive)person(q)});
+ person(player,true);
+ x.fillStyle='#fff';x.font='bold 13px system-ui';x.textAlign='center';x.fillText('YOU',sx(player.x),sy(player.y)+55);
+ if(cool>0)cool--;
+}
+function dist(a,b){return Math.hypot(a.x-b[0],a.y-b[1])}
+function update(){
+ if(done<5){
+  for(let i=0;i<npcs.length;i++){
+   let q=npcs[i];if(!q.alive)continue;
+   let target=i===0?player:tasks[i%tasks.length];
+   let dx=(target.x??target[0])-q.x,dy=(target.y??target[1])-q.y,L=Math.hypot(dx,dy)||1;
+   q.x+=dx/L*.45;q.y+=dy/L*.45;
+   if(q.role==='impostor'&&Math.hypot(q.x-player.x,q.y-player.y)<38&&cool===0){
+     cool=180;document.getElementById('result').textContent='GAME OVER';document.getElementById('reason').textContent='赤い宇宙服の人物に捕まった！';document.getElementById('win').style.display='grid';return;
+   }
+  }
+  tasks.forEach((t,i)=>{if(i===done&&dist(player,t)<48){done++;document.getElementById('status').textContent='タスク '+done+' / 5';}});
+  if(done===5){document.getElementById('result').textContent='MISSION COMPLETE';document.getElementById('reason').textContent='5つのタスクをすべて完了！';document.getElementById('win').style.display='grid'}
+ }
+ draw();requestAnimationFrame(update);
+}
+c.addEventListener('pointerdown',e=>{drag=true;last.x=e.clientX;last.y=e.clientY});
+c.addEventListener('pointermove',e=>{if(!drag)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;player.x+=dx*.9;player.y+=dy*.9;player.x=Math.max(-450,Math.min(450,player.x));player.y=Math.max(-250,Math.min(250,player.y));cam.x=player.x;cam.y=player.y;last.x=e.clientX;last.y=e.clientY});
+c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
+update();
+</script>
+</body>
+</html>
