@@ -47,9 +47,9 @@ function connectPlayer(conn){
  conn.on('data',handleNet);conn.on('close',()=>{connections=connections.filter(c=>c!==conn);multiLog('👥 接続中：'+connections.length+'人')});
 }
 function broadcast(msg){connections=connections.filter(c=>c&&c.open);connections.forEach(c=>c.send(msg))}
-function broadcastState(){if(!isHost)return;broadcast({type:'state',players:remotePlayers,done,bodies:bodies.map(b=>({x:b.x,y:b.y,color:b.color,name:b.name})),sabotage,doors})}
+function broadcastState(){if(!isHost)return;const allPlayers={...remotePlayers,[myPlayerId]:{id:myPlayerId,x:player.x,y:player.y,color:player.color,name:'HOST',alive:player.alive}};broadcast({type:'state',players:allPlayers,done,bodies:bodies.map(b=>({x:b.x,y:b.y,color:b.color,name:b.name})),sabotage,doors})}
 function handleNet(m){
- if(m.type==='welcome'&&!isHost){multi=true;hostConn=hostConn||this;myPlayerId=m.id||myPlayerId;multiLog('👥 ホストに接続しました');return}
+ if(m.type==='welcome'&&!isHost){multi=true;multiLog('👥 ホストに接続しました');return}
  if(m.type==='player'&&isHost){remotePlayers[m.id]={x:m.x,y:m.y,color:m.color,name:m.name||'PLAYER',alive:m.alive!==false};return}
  if(m.type==='task'&&isHost){if(m.index===done){done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';checkWin();broadcastState()}return}
  if(m.type==='state'&&!isHost){remotePlayers=m.players||{};done=m.done||0;bodies=m.bodies||[];sabotage=!!m.sabotage;doors=m.doors||[];document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';return}
