@@ -39,6 +39,7 @@ const npcs=[
 {id:6,name:'シアン',x:280,y:40,color:'#45d8d0',role:'impostor',alive:true,target:null}
 ];
 let bodies=[];
+let ejections=[];
 let cam={x:0,y:0};
 const aiMemory={};
 function aiInit(q){if(!aiMemory[q.id])aiMemory[q.id]={lastRoom:null,suspect:0,seenImpostor:false,seenBodies:0,taskTarget:0,chatSeed:0};return aiMemory[q.id]}
@@ -99,18 +100,28 @@ function person(q,label=true){
  if(label){x.fillStyle='#fff';x.font='bold 12px system-ui';x.textAlign='center';x.fillText(q.name||'YOU',px,py+48)}
 }
 function terminal(t){let px=sx(t[0]),py=sy(t[1]);rr(px-22,py-22,44,44,9,activeTask&&activeTask[2]===t[2]?'#35d28a':'#1388c3');x.fillStyle='#d8f8ff';x.fillRect(px-12,py-8,24,16);x.fillStyle='#14749d';x.fillRect(px-7,py-4,14,3)}
+function drawEjection(e){
+ const px=sx(e.x),py=sy(e.y);x.save();x.translate(px,py);x.globalAlpha=Math.max(0,e.life/90);x.rotate(e.rot);person({...e,color:e.color,name:''},false);x.restore();
+}
 function draw(){
  x.clearRect(0,0,W,H);x.fillStyle='#061018';x.fillRect(0,0,W,H);
  rr(sx(-520),sy(-310),1040,620,40,'#14242c');rr(sx(-490),sy(-280),980,560,30,'#263943');
  [[-450,-250,250,190],[-170,-250,300,190],[160,-250,300,190],[-450,-30,300,260],[-110,-30,300,260],[230,-30,230,260]].forEach(r=>{rr(sx(r[0]),sy(r[1]),r[2],r[3],20,'#1a2a33');x.strokeStyle='#405864';x.lineWidth=3;x.stroke()});
  tasks.forEach((t,i)=>{if(i>=done)terminal(t)}); vents.forEach((v,i)=>{let px=sx(v[0]),py=sy(v[1]);x.beginPath();x.ellipse(px,py,28,14,0,0,7);x.fillStyle='#111b20';x.fill();x.strokeStyle='#667983';x.lineWidth=3;x.stroke();if(i===0&&sabotage){x.fillStyle='#ff5050';x.globalAlpha=.55;x.beginPath();x.arc(px,py,34,0,7);x.fill();x.globalAlpha=1}});
- npcs.forEach(q=>{if(q.alive)person(q)});Object.values(remotePlayers).forEach(q=>{if(q.id!==myPlayerId&&q.alive!==false)person({...q,name:q.name||'PLAYER'},true)});doors.forEach(r=>{rr(sx(r[0]),sy(r[1]),r[2],r[3],5,'#b84a3c')});bodies.forEach(q=>drawBody(q));
+ npcs.forEach(q=>{if(q.alive)person(q)});Object.values(remotePlayers).forEach(q=>{if(q.id!==myPlayerId&&q.alive!==false)person({...q,name:q.name||'PLAYER'},true)});doors.forEach(r=>{rr(sx(r[0]),sy(r[1]),r[2],r[3],5,'#b84a3c')});bodies.forEach(q=>drawBody(q));ejections.forEach(e=>drawEjection(e));
  if(player.alive)person({...player,name:'YOU'});
 }
 function distXY(a,b){return Math.hypot(a.x-b[0],a.y-b[1])}
 function setLog(s){document.getElementById('log').textContent=s}
 function end(title,text){ended=true;document.getElementById('endTitle').textContent=title;document.getElementById('endText').textContent=text;document.getElementById('end').style.display='flex'}
 function kill(q){q.alive=false;bodies.push({x:q.x,y:q.y,color:q.color,name:q.name});setLog(q.name+'が倒れている…');}
+function eject(q){
+ if(!q)return;
+ ejections.push({x:q.x,y:q.y,color:q.color,name:q.name,life:90,rot:0,vx:(Math.random()-.5)*1.2,vy:-2.2,vr:(Math.random()-.5)*.08});
+ setLog(q.name+'が宇宙へ放出された！');
+ setTimeout(()=>{ejections=ejections.filter(e=>e.name!==q.name||e.life>0)},1200);
+}
+function updateEjections(){for(const e of ejections){e.x+=e.vx;e.y+=e.vy;e.vy-=.015;e.rot+=e.vr;e.life--;}}
 function closestBody(){let b=null,bd=999;for(const q of bodies){let z=Math.hypot(player.x-q.x,player.y-q.y);if(z<bd){bd=z;b=q}}return bd<70?b:null}
 function checkWin(){if(done>=tasks.length){end('CREW WIN!','全タスク完了！');return true}if(npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','インポスターがクルーを上回った！');return true}return false}
 function renderChat(){const el=document.getElementById('chatlog');el.innerHTML=chatMessages.map(m=>'<div class="chatline"><b>'+m.n+'</b>：'+m.t+'</div>').join('');el.scrollTop=el.scrollHeight}
@@ -129,7 +140,7 @@ function vote(id){
    box.animate([{transform:'scale(.6)',opacity:0},{transform:'scale(1.12)',opacity:1},{transform:'scale(1)',opacity:1}],{duration:700});
    setTimeout(()=>{
      document.getElementById('meeting').style.display='none';meeting=false;
-     if(target){kill(target);setLog(target.name+'が追放された。');if(target.role==='impostor'){end('CREW WIN!','インポスターを見つけた！');return}}
+     if(target){eject(target);setLog(target.name+'が追放された。');if(target.role==='impostor'){end('CREW WIN!','インポスターを見つけた！');return}}
      else setLog('投票はスキップされた。');
      checkWin();setTimeout(()=>setLog('会議終了。クルーは再び行動開始。'),650);
    },1200);
@@ -175,6 +186,7 @@ function taskGame(){
 c.addEventListener('click',e=>{if(activeTask&&!meeting&&!ended)taskGame()});
 function closeDoors(){doors=[[-250,-30,120,12],[100,-30,120,12],[0,150,12,90]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
 function update(){
+ updateEjections();
  if(!ended&&!meeting&&(player.alive||ghost)){
   if(sabotage){if(aiTimer%60===0){sabLeft--;document.getElementById('sabTime').textContent=sabLeft}if(sabLeft<=0){end('IMPOSTOR WIN!','サボタージュを止められなかった！');return}}
   if(sabotage&&tasks.some(t=>Math.hypot(player.x-t[0],player.y-t[1])<48))repairSabotage();
