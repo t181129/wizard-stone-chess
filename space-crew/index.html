@@ -15,7 +15,7 @@ button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:whit
 #meeting .box{position:relative}
 </style></head><body>
 <canvas id="game"></canvas><div id="ui">
-<div class="top">SPACE CREW</div>
+<div class="top" id="locationName">Communications</div>
 <div class="card"><b id="status">タスク 0 / 5</b><div class="bar"><div id="fill" class="fill"></div></div><div class="small" id="role">役職：クルー</div></div>
 <div class="card right"><b>船内通信</b><div id="multiStatus" class="small">👥 マルチプレイ：未接続</div><div id="multiPanel" style="margin:5px 0"><button id="aiBtn">🤖 AIと遊ぶ</button><input id="roomCode" maxlength="6" placeholder="部屋コード" style="width:90px;padding:7px;border-radius:7px;border:1px solid #526a77;background:#08151c;color:#fff;text-transform:uppercase"><button id="hostBtn">部屋を作る</button><button id="joinBtn">参加</button></div><div class="small" id="log">探索を開始しました。</div><button class="danger" id="report">🚨 通報</button><button id="meetingBtn">📢 緊急会議</button><button id="ventBtn">🕳️ ベント</button></div>
 <div id="sabotage">⚠️ 緊急サボタージュ！ <span id="sabTime">20</span>秒</div>
@@ -43,7 +43,8 @@ let ejections=[];
 let cam={x:0,y:0};
 const aiMemory={};
 function aiInit(q){if(!aiMemory[q.id])aiMemory[q.id]={lastRoom:null,suspect:0,seenImpostor:false,seenBodies:0,taskTarget:0,chatSeed:0};return aiMemory[q.id]}
-function roomOf(q){if(q.x< -160&&q.y<0)return'通信';if(q.x>=-160&&q.x<160&&q.y<0)return'電力';if(q.x>=160&&q.y<0)return'酸素';if(q.x<0)return'エンジン';return'航法'}
+function roomOf(q){if(q.x< -160&&q.y<0)return'Communications';if(q.x>=-160&&q.x<160&&q.y<0)return'Electrical';if(q.x>=160&&q.y<0)return'Oxygen';if(q.x<0)return'Engine';return'Navigation'}
+function updateLocationName(){const el=document.getElementById('locationName');if(el)el.textContent=roomOf(player)}
 function nearestCrew(q){return npcs.filter(z=>z.alive&&z.role==='crew').sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
 function nearestBodyTo(q){return bodies.slice().sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
 function aiChat(q){const m=aiInit(q);const lines=q.role==='impostor'?['今の動き、少し気になる。','自分はタスクをしていたよ。','死体の場所を確認しよう。','誰か怪しい動きを見た？']:['私は今のところ普通にタスク中。','さっき '+roomOf(q)+' にいたよ。','死体を見つけたら報告しよう。','誰かの行動を見ていた人いる？'];chatMessages.push({n:q.name,t:lines[m.chatSeed++%lines.length]});renderChat()}
@@ -194,6 +195,7 @@ c.addEventListener('click',e=>{if(activeTask&&!meeting&&!ended)taskGame()});
 function closeDoors(){doors=[[-250,-30,120,12],[100,-30,120,12],[0,150,12,90]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
 function update(){
  updateEjections();
+ updateLocationName();
  if(!ended&&!meeting&&(player.alive||ghost)){
   if(sabotage){if(aiTimer%60===0){sabLeft--;document.getElementById('sabTime').textContent=sabLeft}if(sabLeft<=0){end('IMPOSTOR WIN!','サボタージュを止められなかった！');return}}
   if(sabotage&&tasks.some(t=>Math.hypot(player.x-t[0],player.y-t[1])<48))repairSabotage();
