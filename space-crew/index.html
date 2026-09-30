@@ -101,7 +101,9 @@ function person(q,label=true){
 }
 function terminal(t){let px=sx(t[0]),py=sy(t[1]);rr(px-22,py-22,44,44,9,activeTask&&activeTask[2]===t[2]?'#35d28a':'#1388c3');x.fillStyle='#d8f8ff';x.fillRect(px-12,py-8,24,16);x.fillStyle='#14749d';x.fillRect(px-7,py-4,14,3)}
 function drawEjection(e){
- const px=sx(e.x),py=sy(e.y);x.save();x.translate(px,py);x.globalAlpha=Math.max(0,e.life/90);x.rotate(e.rot);person({...e,color:e.color,name:''},false);x.restore();
+ const px=sx(e.x),py=sy(e.y);x.save();x.translate(px,py);x.globalAlpha=Math.max(0,e.life/110);x.rotate(e.rot);person({...e,color:e.color,name:e.name},true);x.restore();
+ // 宇宙へ飛んでいく人物を画面中央付近で追いかける
+ x.save();x.globalAlpha=Math.max(0,e.life/110)*.9;x.fillStyle='#fff';x.font='900 18px system-ui';x.textAlign='center';x.shadowColor='#000';x.shadowBlur=6;x.fillText(e.name+' — 追放',W/2,H*.18);x.restore();
 }
 function draw(){
  x.clearRect(0,0,W,H);x.fillStyle='#061018';x.fillRect(0,0,W,H);
@@ -117,11 +119,16 @@ function end(title,text){ended=true;document.getElementById('endTitle').textCont
 function kill(q){q.alive=false;bodies.push({x:q.x,y:q.y,color:q.color,name:q.name});setLog(q.name+'が倒れている…');}
 function eject(q){
  if(!q)return;
- ejections.push({x:q.x,y:q.y,color:q.color,name:q.name,life:90,rot:0,vx:(Math.random()-.5)*1.2,vy:-2.2,vr:(Math.random()-.5)*.08});
+ ejections.push({x:q.x,y:q.y,color:q.color,name:q.name,life:110,rot:0,vx:(Math.random()-.5)*1.2,vy:-2.2,vr:(Math.random()-.5)*.08});
  setLog(q.name+'が宇宙へ放出された！');
- setTimeout(()=>{ejections=ejections.filter(e=>e.name!==q.name||e.life>0)},1200);
+ setTimeout(()=>{ejections=ejections.filter(e=>e.name!==q.name||e.life>0)},1400);
 }
-function updateEjections(){for(const e of ejections){e.x+=e.vx;e.y+=e.vy;e.vy-=.015;e.rot+=e.vr;e.life--;}}
+function updateEjections(){
+ for(const e of ejections){e.x+=e.vx;e.y+=e.vy;e.vy-=.015;e.rot+=e.vr;e.life--;}
+ const focus=ejections[ejections.length-1];
+ if(focus&&focus.life>0){cam.x+=(focus.x-cam.x)*.16;cam.y+=(focus.y-cam.y)*.16;}
+ else if(player.alive){cam.x+=(player.x-cam.x)*.12;cam.y+=(player.y-cam.y)*.12;}
+}
 function closestBody(){let b=null,bd=999;for(const q of bodies){let z=Math.hypot(player.x-q.x,player.y-q.y);if(z<bd){bd=z;b=q}}return bd<70?b:null}
 function checkWin(){if(done>=tasks.length){end('CREW WIN!','全タスク完了！');return true}if(npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','インポスターがクルーを上回った！');return true}return false}
 function renderChat(){const el=document.getElementById('chatlog');el.innerHTML=chatMessages.map(m=>'<div class="chatline"><b>'+m.n+'</b>：'+m.t+'</div>').join('');el.scrollTop=el.scrollHeight}
