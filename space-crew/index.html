@@ -73,7 +73,12 @@ function startHost(){
 function joinRoom(){
  if(peer)return;roomCode=document.getElementById('roomCode').value.trim().toUpperCase();if(roomCode.length<4){multiLog('⚠️ 部屋コードを入力');return}peer=new Peer();peer.on('open',()=>{hostConn=peer.connect(roomCode,{reliable:true});connectPlayer(hostConn)});peer.on('error',e=>multiLog('⚠️ 接続できません：'+e.type));
 }
-function startAI(){if(ended)return;aiMode=true;multi=false;document.getElementById('multiStatus').textContent='🤖 AI対戦中：AI 5人';setLog('AIクルーとAIインポスターが参加しました！');for(let i=0;i<npcs.length;i++){npcs[i].x=[-170,150,-40,360,-350,280][i];npcs[i].y=[-40,-20,110,100,60,40][i]}}
+function assignRandomImpostors(){
+ const shuffled=[...npcs].sort(()=>Math.random()-.5);
+ npcs.forEach(q=>q.role='crew');
+ shuffled.slice(0,2).forEach(q=>q.role='impostor');
+}
+function startAI(){if(ended)return;aiMode=true;multi=false;assignRandomImpostors();document.getElementById('multiStatus').textContent='🤖 AI対戦中：AI 5人';setLog('AIクルーとAIインポスターが参加しました！');for(let i=0;i<npcs.length;i++){npcs[i].x=[-170,150,-40,360,-350,280][i];npcs[i].y=[-40,-20,110,100,60,40][i]}}
 document.getElementById('aiBtn').onclick=startAI;document.getElementById('hostBtn').onclick=startHost;document.getElementById('joinBtn').onclick=joinRoom;
 function sendLocal(){if(!multi)return;const msg={type:'player',id:myPlayerId,x:player.x,y:player.y,color:player.color,alive:player.alive,name:'PLAYER'};if(isHost){remotePlayers[myPlayerId]=msg;broadcastState()}else if(hostConn&&hostConn.open)hostConn.send(msg)}
 setInterval(sendLocal,100);
@@ -81,6 +86,7 @@ const vents=[[-390,-120],[-40,-120],[330,-120],[-300,120],[120,120],[390,170]];
 const sabotageTargets=[['通信',-380,-190],['電力',-80,-220],['酸素',300,-140]];
 const roles=[['クルー','タスクを完了する'],['技術員','ベントを短時間だけ使用できる'],['監視員','会議で追加情報を得る'],['インポスター','クルーを減らし妨害する']];
 player.role='技術員';
+assignRandomImpostors();
 function resize(){d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*d;c.height=H*d;x.setTransform(d,0,0,d,0,0)}addEventListener('resize',resize);resize();
 function sx(a){return a-cam.x+W/2}function sy(a){return a-cam.y+H/2}function rr(px,py,w,h,r,f){x.fillStyle=f;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
 function drawBody(q){
