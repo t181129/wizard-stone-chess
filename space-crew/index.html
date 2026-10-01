@@ -179,12 +179,12 @@ function moveAI(){
   if(q.role==='impostor'){
    if(Math.random()<0.002)sabotageNow();
    let target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-q.x,z.y-q.y)<260);
-   if(target){let dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.75;q.y+=dy/L*.75;
+   if(target){let dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.65;q.y+=dy/L*.65;
     if(Math.hypot(q.x-target.x,q.y-target.y)<34){impostorAttack(q);q.x-=8;}
    }else{q.x+=Math.sin(Date.now()/900+q.id)*.5;q.y+=Math.cos(Date.now()/1000+q.id)*.5}
   }else{
    let targetTask=tasks[Math.min((done+q.id)%tasks.length,tasks.length-1)];
-   let t=targetTask;let dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.5;q.y+=dy/L*.5;
+   let t=targetTask;let dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.65;q.y+=dy/L*.65;
   }
  }
 }
@@ -210,12 +210,12 @@ function update(){
  activeTask=tasks[done];taskStage=0;document.getElementById('status').textContent='タスク中：'+activeTask[2];setLog(activeTask[2]+'のミニゲーム開始！');
 }
 if(activeTask&&taskStage>=3){done++;activeTask=null;taskStage=0;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog(tasks[done-1][2]+'タスク完了！');checkWin()}
-  let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(!ghost&&!vented&&imp&&Math.hypot(imp.x-player.x,imp.y-player.y)<35&&killCooldown===0){player.alive=false;ghost=true;setLog('👻 ゴーストになった！');}
+  let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(!ghost&&!vented&&imp&&Math.hypot(imp.x-player.x,imp.y-player.y)<35&&killCooldown===0){bodies.push({x:player.x,y:player.y,color:player.color,name:'YOU'});player.alive=false;ghost=true;setLog('👻 ゴーストになった！ 死体が残った。');}
  }
  if(isHost&&aiTimer%6===0)broadcastState();draw();requestAnimationFrame(update)
 }
 c.addEventListener('pointerdown',e=>{if(ended||meeting)return;drag=true;last={x:e.clientX,y:e.clientY}});
-c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;player.x=Math.max(-850,Math.min(750,player.x+dx*.9));player.y=Math.max(-450,Math.min(500,player.y+dy*.9));cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
+c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;player.x=Math.max(-850,Math.min(750,player.x+dx*.65));player.y=Math.max(-450,Math.min(500,player.y+dy*.65));cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
 c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
 document.getElementById('role').textContent='役職：'+player.role+' — '+roles.find(r=>r[0]===player.role)[1];
 update();
