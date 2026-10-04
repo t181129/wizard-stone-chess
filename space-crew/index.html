@@ -17,7 +17,7 @@ button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:whit
 <canvas id="game"></canvas><div id="ui">
 <div class="top" id="locationName">Communications</div>
 <div class="card"><b id="status">タスク 0 / 5</b><div class="bar"><div id="fill" class="fill"></div></div><div class="small" id="role">役職：クルー</div></div>
-<div class="card right"><b>船内通信</b><div id="multiStatus" class="small">👥 マルチプレイ：未接続</div><div id="multiPanel" style="margin:5px 0"><button id="aiBtn">🤖 AIと遊ぶ</button><input id="roomCode" maxlength="6" placeholder="部屋コード" style="width:90px;padding:7px;border-radius:7px;border:1px solid #526a77;background:#08151c;color:#fff;text-transform:uppercase"><button id="hostBtn">部屋を作る</button><button id="joinBtn">参加</button></div><div class="small" id="log">探索を開始しました。</div><button class="danger" id="report">🚨 通報</button><button id="meetingBtn">📢 緊急会議</button><button id="ventBtn">🕳️ ベント</button><button id="killBtn" class="danger">⚠️ アクション</button></div>
+<div class="card right"><b>船内通信</b><div id="multiStatus" class="small">👥 マルチプレイ：未接続</div><div id="multiPanel" style="margin:5px 0"><button id="aiBtn">🤖 AIと遊ぶ</button><input id="roomCode" maxlength="6" placeholder="部屋コード" style="width:90px;padding:7px;border-radius:7px;border:1px solid #526a77;background:#08151c;color:#fff;text-transform:uppercase"><button id="hostBtn">部屋を作る</button><button id="joinBtn">参加</button></div><div class="small" id="log">探索を開始しました。</div><button class="danger" id="report">🚨 通報</button><button id="meetingBtn">📢 緊急会議</button><button id="ventBtn">🕳️ ベント</button><button id="killBtn" class="danger" style="display:none">⚠️ アクション</button></div>
 <div id="sabotage">⚠️ 緊急サボタージュ！ <span id="sabTime">20</span>秒</div>
 <div class="card bottom"><b>操作</b><div class="small">画面ドラッグ：移動<br>青い端末：タスク<br>死体の近く：通報</div></div>
 <div id="meeting"><div class="box"><h2>緊急会議</h2><p id="meetingText">誰が怪しい？</p><div id="chatlog" class="chatbox"></div><div id="chat"><input id="chatInput" maxlength="40" placeholder="会議チャット…"><button id="chatSend">送信</button></div><div id="votes" class="votes"></div><div id="voteResult" class="result"></div><button id="skip">投票をスキップ</button></div></div>
@@ -55,10 +55,15 @@ const roomDoors=[
 ];
 function nearRoomDoor(px,py){return roomDoors.some(d=>px>=d.x-12&&px<=d.x+d.w+12&&py>=d.y-12&&py<=d.y+d.h+12)}
 function roomAt(px,py){return rooms.find(r=>px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h)||null}
+function pointInsideRoom(px,py,r){return px>r.x+8&&px<r.x+r.w-8&&py>r.y+8&&py<r.y+r.h-8}
 function canMoveTo(fromX,fromY,toX,toY){
  const from=roomAt(fromX,fromY),to=roomAt(toX,toY);
  if(from===to)return true;
- return nearRoomDoor(toX,toY)||nearRoomDoor(fromX,fromY);
+ // 部屋の外へ出る/別の部屋へ入るときは、ドア付近だけ許可
+ if(nearRoomDoor(fromX,fromY)||nearRoomDoor(toX,toY))return true;
+ // 廊下同士の移動は許可
+ if(!from&&!to)return true;
+ return false;
 }
 function roomOf(q){const r=rooms.find(r=>q.x>=r.x&&q.x<=r.x+r.w&&q.y>=r.y&&q.y<=r.y+r.h);return r?r.n:'Corridor'}
 function updateLocationName(){const el=document.getElementById('locationName');if(el)el.textContent=roomOf(player)}
@@ -107,6 +112,8 @@ function assignRoles(){
 }
 function updateRoleUI(){
  const el=document.getElementById('role');
+ const kb=document.getElementById('killBtn');
+ if(kb)kb.style.display=player.role==='インポスター'?'inline-block':'none';
  if(el)el.textContent='役職：'+player.role+' — '+(roles.find(r=>r[0]===player.role)||['インポスター','クルーを減らし妨害する'])[1];
 }
 assignRoles();
