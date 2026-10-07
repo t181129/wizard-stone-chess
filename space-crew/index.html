@@ -46,12 +46,12 @@ const aiMemory={};
 function aiInit(q){if(!aiMemory[q.id])aiMemory[q.id]={lastRoom:null,suspect:0,seenImpostor:false,seenBodies:0,taskTarget:0,chatSeed:0};return aiMemory[q.id]}
 const rooms=[{n:'Communications',x:-800,y:-360,w:430,h:330},{n:'Electrical',x:-300,y:-390,w:500,h:330},{n:'Oxygen',x:270,y:-360,w:500,h:330},{n:'Engine',x:-800,y:30,w:520,h:430},{n:'Navigation',x:-150,y:30,w:500,h:430},{n:'Storage',x:390,y:30,w:380,h:430}];
 const roomDoors=[
- {x:-370,y:-38,w:70,h:28}, // Communications bottom edge
- {x:110,y:-68,w:70,h:28},  // Electrical bottom edge
- {x:270,y:-25,w:28,h:70},  // Oxygen left edge
- {x:-280,y:30,w:70,h:28},   // Engine top edge
- {x:100,y:30,w:70,h:28},    // Navigation top edge
- {x:350,y:180,w:28,h:70}    // Storage left edge
+ {x:-625,y:-58,w:70,h:28},  // Communications bottom wall: horizontal door
+ {x:-25,y:-88,w:70,h:28},   // Electrical bottom wall: horizontal door
+ {x:255,y:-275,w:28,h:70},  // Oxygen left wall: vertical door
+ {x:-705,y:22,w:70,h:28},   // Engine top wall: horizontal door
+ {x:-5,y:22,w:70,h:28},     // Navigation top wall: horizontal door
+ {x:378,y:180,w:28,h:70}    // Storage left wall: vertical door
 ];
 const props=[
  {type:'breaker',name:'Main Breaker',x:-150,y:-275,w:58,h:78,solid:true,task:1},
@@ -212,7 +212,9 @@ function drawEjection(e){
 }
 function draw(){
  x.clearRect(0,0,W,H);x.fillStyle='#061018';x.fillRect(0,0,W,H);
- rr(sx(-900),sy(-500),1700,1050,50,'#14242c');rr(sx(-870),sy(-470),1640,990,38,'#263943');
+ rr(sx(-1120),sy(-620),2150,1250,60,'#14242c');rr(sx(-1085),sy(-585),2080,1180,48,'#263943');
+// 広い船内の床パネル
+x.strokeStyle='#344b55';x.lineWidth=2;for(let gx=-1050;gx<=950;gx+=100){x.beginPath();x.moveTo(sx(gx),sy(-570));x.lineTo(sx(gx),sy(570));x.stroke()}for(let gy=-570;gy<=570;gy+=100){x.beginPath();x.moveTo(sx(-1070),sy(gy));x.lineTo(sx(1010),sy(gy));x.stroke()}
  rooms.forEach(r=>{
  rr(sx(r.x),sy(r.y),r.w,r.h,24,'#17262e');
  // 金属壁の外枠
@@ -367,7 +369,7 @@ function taskGame(){
  if(taskStage>=3){activeTask=null;const completedIndex=done;done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog('タスク完了！');if(isHost)broadcastState();else if(hostConn&&hostConn.open)hostConn.send({type:'task',index:completedIndex});checkWin()}
 }
 c.addEventListener('click',e=>{if(activeTask&&!meeting&&!ended)taskGame()});
-function closeDoors(){doors=[[-250,-30,120,12],[100,-30,120,12],[0,150,12,90]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
+function closeDoors(){doors=[[-590,-52,70,28],[-10,-82,70,28],[270,-270,28,70],[-670,28,70,28],[20,28,70,28],[390,190,28,70]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
 function update(){
  updateEjections();
  updateLocationName();
@@ -392,7 +394,7 @@ if(activeTask&&taskStage>=3){done++;activeTask=null;taskStage=0;document.getElem
  if(isHost&&aiTimer%6===0)broadcastState();draw();requestAnimationFrame(update)
 }
 c.addEventListener('pointerdown',e=>{if(ended||meeting)return;drag=true;last={x:e.clientX,y:e.clientY}});
-c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;const nx=Math.max(-850,Math.min(750,player.x+dx*.52)),ny=Math.max(-450,Math.min(500,player.y+dy*.52));if(canMoveTo(player.x,player.y,nx,ny)){player.x=nx;player.y=ny}cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
+c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;const nx=Math.max(-1080,Math.min(980,player.x+dx*.52)),ny=Math.max(-580,Math.min(580,player.y+dy*.52));if(canMoveTo(player.x,player.y,nx,ny)){player.x=nx;player.y=ny}cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
 c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
 updateRoleUI();
 update();
