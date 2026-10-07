@@ -44,14 +44,18 @@ let ejections=[];
 let cam={x:0,y:0};
 const aiMemory={};
 function aiInit(q){if(!aiMemory[q.id])aiMemory[q.id]={lastRoom:null,suspect:0,seenImpostor:false,seenBodies:0,taskTarget:0,chatSeed:0};return aiMemory[q.id]}
-const rooms=[{n:'Communications',x:-800,y:-360,w:430,h:330},{n:'Electrical',x:-300,y:-390,w:500,h:330},{n:'Oxygen',x:270,y:-360,w:500,h:330},{n:'Engine',x:-800,y:30,w:520,h:430},{n:'Navigation',x:-150,y:30,w:500,h:430},{n:'Storage',x:390,y:30,w:380,h:430}];
+const rooms=[{n:'Communications',x:-800,y:-360,w:430,h:330},{n:'Electrical',x:-300,y:-390,w:500,h:330},{n:'Oxygen',x:270,y:-360,w:500,h:330},{n:'Engine',x:-800,y:30,w:520,h:430},{n:'Navigation',x:-150,y:30,w:500,h:430},{n:'Storage',x:390,y:30,w:380,h:430},{n:'Security',x:-1030,y:-500,w:260,h:240},{n:'Medical',x:700,y:-500,w:280,h:240},{n:'Cafeteria',x:-1030,y:270,w:260,h:250},{n:'Reactor',x:500,y:270,w:400,h:250}];
 const roomDoors=[
  {x:-625,y:-58,w:70,h:28},  // Communications bottom wall: horizontal door
  {x:-25,y:-88,w:70,h:28},   // Electrical bottom wall: horizontal door
  {x:255,y:-275,w:28,h:70},  // Oxygen left wall: vertical door
  {x:-705,y:22,w:70,h:28},   // Engine top wall: horizontal door
  {x:-5,y:22,w:70,h:28},     // Navigation top wall: horizontal door
- {x:378,y:180,w:28,h:70}    // Storage left wall: vertical door
+ {x:378,y:180,w:28,h:70},    // Storage left wall: vertical door
+ {x:-930,y:-275,w:70,h:28}, // Security bottom
+ {x:795,y:-275,w:70,h:28},  // Medical bottom
+ {x:-930,y:248,w:70,h:28},  // Cafeteria top
+ {x:660,y:248,w:70,h:28}    // Reactor top
 ];
 const props=[
  {type:'breaker',name:'Main Breaker',x:-150,y:-275,w:58,h:78,solid:true,task:1},
@@ -69,8 +73,18 @@ const props=[
  {type:'comms',name:'Comms Array',x:-680,y:-70,w:100,h:58,solid:true,task:0}
 ];
 function propRect(p){return {x:p.x-p.w/2,y:p.y-p.h/2,w:p.w,h:p.h}}
-function propHit(px,py,r=14){
- return props.some(p=>p.solid&&px+r>p.x-p.w/2&&px-r<p.x+p.w/2&&py+r>p.y-p.h/2&&py-r<p.y+p.h/2);
+function bodyRectContact(px,py,rx,ry,r=22){
+ const nx=Math.max(rx,Math.min(px,rx+ry.w)),ny=Math.max(ry,Math.min(py,ry+ry.h));
+ return Math.hypot(px-nx,py-ny)<=r;
+}
+function bodyContact(a,b,extra=0){
+ return Math.hypot(a.x-b.x,a.y-b.y)<=44+extra;
+}
+function bodyTouchesPoint(a,px,py,extra=0){
+ return Math.hypot(a.x-px,a.y-py)<=22+extra;
+}
+function propHit(px,py,r=22){
+ return props.some(p=>p.solid&&bodyRectContact(px,py,p.x-p.w/2,{w:p.w,h:p.h},r));
 }
 function canMoveAroundProps(fromX,fromY,toX,toY){
  const steps=6;
@@ -301,7 +315,7 @@ function updateEjections(){
  if(focus&&focus.life>0){cam.x+=(focus.x-cam.x)*.16;cam.y+=(focus.y-cam.y)*.16;}
  else if(player.alive){cam.x+=(player.x-cam.x)*.12;cam.y+=(player.y-cam.y)*.12;}
 }
-function closestBody(){let b=null,bd=999;for(const q of bodies){let z=Math.hypot(player.x-q.x,player.y-q.y);if(z<bd){bd=z;b=q}}return bd<70?b:null}
+function closestBody(){let b=null,bd=999;for(const q of bodies){let z=Math.hypot(player.x-q.x,player.y-q.y);if(z<bd){bd=z;b=q}}return bd<=44?b:null}
 function checkWin(){if(player.role==='インポスター'&&npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','クルーを全員見つけた！');return true}if(done>=tasks.length){end('CREW WIN!','全タスク完了！');return true}if(npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','インポスターがクルーを上回った！');return true}return false}
 function renderChat(){const el=document.getElementById('chatlog');el.innerHTML=chatMessages.map(m=>'<div class="chatline"><b>'+m.n+'</b>：'+m.t+'</div>').join('');el.scrollTop=el.scrollHeight}
 function openMeeting(reason='会議が始まりました。'){
@@ -333,18 +347,18 @@ document.getElementById('chatSend').onclick=()=>{const input=document.getElement
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('chatSend').click()});
 function sabotageNow(){if(sabotage||ended)return;sabotage=true;sabLeft=20;document.getElementById('sabotage').style.display='block';setLog('インポスターがサボタージュを発生させた！');}
 function repairSabotage(){if(!sabotage)return;sabotage=false;sabLeft=0;document.getElementById('sabotage').style.display='none';setLog('サボタージュを解除した！');}
-function useVent(){if(ended||meeting)return;let near=vents.find(v=>Math.hypot(player.x-v[0],player.y-v[1])<55);if(near){vented=!vented;setLog(vented?'ベントに隠れた。':'ベントから出た。');}else setLog('近くにベントがありません。');}
+function useVent(){if(ended||meeting)return;let near=vents.find(v=>bodyTouchesPoint(player,v[0],v[1],8));if(near){vented=!vented;setLog(vented?'ベントに隠れた。':'ベントから出た。');}else setLog('近くにベントがありません。');}
 document.getElementById('ventBtn').onclick=useVent;
 document.getElementById('sabotage').onclick=repairSabotage;
 function playerImpostorAction(){
  if(player.role!=='インポスター'||!player.alive||meeting||ended||playerImpostorKillCooldown>0)return;
- const target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-player.x,z.y-player.y)<45);
+ const target=npcs.find(z=>z.alive&&z.role==='crew'&&bodyContact(z,player));
  if(target){kill(target);playerImpostorKillCooldown=180;setLog(target.name+'が倒れた。');checkWin();}else{setLog('近くにターゲットがいません。');}
 }
 document.getElementById('killBtn').onclick=playerImpostorAction;
 function impostorAttack(q){
  if(killCooldown>0)return;
- const target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-q.x,z.y-q.y)<32);
+ const target=npcs.find(z=>z.alive&&z.role==='crew'&&bodyContact(z,q));
  if(target){kill(target);killCooldown=180;setLog(q.name+'のキルクールダウン開始');}
 }
 function moveAI(){
@@ -369,27 +383,27 @@ function taskGame(){
  if(taskStage>=3){activeTask=null;const completedIndex=done;done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog('タスク完了！');if(isHost)broadcastState();else if(hostConn&&hostConn.open)hostConn.send({type:'task',index:completedIndex});checkWin()}
 }
 c.addEventListener('click',e=>{if(activeTask&&!meeting&&!ended)taskGame()});
-function closeDoors(){doors=[[-590,-52,70,28],[-10,-82,70,28],[270,-270,28,70],[-670,28,70,28],[20,28,70,28],[390,190,28,70]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
+function closeDoors(){doors=[[-590,-52,70,28],[-10,-82,70,28],[270,-270,28,70],[-670,28,70,28],[20,28,70,28],[390,190,28,70],[-930,-275,70,28],[795,-275,70,28],[-930,248,70,28],[660,248,70,28]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
 function update(){
  updateEjections();
  updateLocationName();
  if(player.role==='インポスター'){const el=document.getElementById('role');if(el)el.style.color='#ff6b6b';}
  if(!ended&&!meeting&&(player.alive||ghost)){
   if(sabotage){if(aiTimer%60===0){sabLeft--;document.getElementById('sabTime').textContent=sabLeft}if(sabLeft<=0){end('IMPOSTOR WIN!','サボタージュを止められなかった！');return}}
-  if(sabotage&&tasks.some(t=>Math.hypot(player.x-t[0],player.y-t[1])<48))repairSabotage();
+  if(sabotage&&tasks.some(t=>bodyTouchesPoint(player,t[0],t[1],6)))repairSabotage();
   if(ghost){setLog('👻 ゴーストモード：自由に船内を探索中');}
   if(aiTimer++%15===0&&(isHost||!multi||aiMode))moveAI();
   if(killCooldown>0)killCooldown--;if(playerImpostorKillCooldown>0)playerImpostorKillCooldown--;
   if(killCooldown===0&&npcs.some(q=>q.role==='impostor'&&q.alive))document.getElementById('log').dataset.ready='1';
   if(player.role!=='インポスター'&&done<tasks.length&&!activeTask){
- const taskProp=props.find(p=>p.task===done&&Math.hypot(player.x-p.x,player.y-p.y)<72);
- const taskNearTerminal=distXY(player,tasks[done])<58;
+ const taskProp=props.find(p=>p.task===done&&bodyRectContact(player.x,player.y,p.x-p.w/2,{w:p.w,h:p.h},22));
+ const taskNearTerminal=bodyTouchesPoint(player,tasks[done][0],tasks[done][1],8);
  if(taskProp||taskNearTerminal){
   activeTask=tasks[done];taskStage=0;document.getElementById('status').textContent='タスク中：'+activeTask[2];setLog(activeTask[2]+'のミニゲーム開始！');
  }
 }
 if(activeTask&&taskStage>=3){done++;activeTask=null;taskStage=0;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog(tasks[done-1][2]+'タスク完了！');checkWin()}
-  let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(!ghost&&!vented&&imp&&Math.hypot(imp.x-player.x,imp.y-player.y)<35&&killCooldown===0){bodies.push({x:player.x,y:player.y,color:player.color,name:'YOU'});player.alive=false;ghost=true;setLog('👻 ゴーストになった！ 死体が残った。');}
+  let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(!ghost&&!vented&&imp&&bodyContact(imp,player)&&killCooldown===0){bodies.push({x:player.x,y:player.y,color:player.color,name:'YOU'});player.alive=false;ghost=true;setLog('👻 ゴーストになった！ 死体が残った。');}
  }
  if(isHost&&aiTimer%6===0)broadcastState();draw();requestAnimationFrame(update)
 }
