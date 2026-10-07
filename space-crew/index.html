@@ -46,12 +46,12 @@ const aiMemory={};
 function aiInit(q){if(!aiMemory[q.id])aiMemory[q.id]={lastRoom:null,suspect:0,seenImpostor:false,seenBodies:0,taskTarget:0,chatSeed:0};return aiMemory[q.id]}
 const rooms=[{n:'Communications',x:-800,y:-360,w:430,h:330},{n:'Electrical',x:-300,y:-390,w:500,h:330},{n:'Oxygen',x:270,y:-360,w:500,h:330},{n:'Engine',x:-800,y:30,w:520,h:430},{n:'Navigation',x:-150,y:30,w:500,h:430},{n:'Storage',x:390,y:30,w:380,h:430}];
 const roomDoors=[
- {x:-370,y:-30,w:70,h:34}, // Communications
- {x:110,y:-60,w:70,h:34}, // Electrical
- {x:250,y:-20,w:34,h:70}, // Oxygen
- {x:-280,y:30,w:70,h:34}, // Engine
- {x:100,y:30,w:70,h:34}, // Navigation
- {x:350,y:180,w:74,h:70} // Storage
+ {x:-370,y:-38,w:70,h:28}, // Communications bottom edge
+ {x:110,y:-68,w:70,h:28},  // Electrical bottom edge
+ {x:270,y:-25,w:28,h:70},  // Oxygen left edge
+ {x:-280,y:30,w:70,h:28},   // Engine top edge
+ {x:100,y:30,w:70,h:28},    // Navigation top edge
+ {x:350,y:180,w:28,h:70}    // Storage left edge
 ];
 const props=[
  {type:'breaker',name:'Main Breaker',x:-150,y:-275,w:58,h:78,solid:true,task:1},
@@ -137,7 +137,7 @@ function assignRoles(){
  player.role=playerIsImp?'インポスター':'技術員';
  npcs.forEach(q=>q.role='crew');
  const pool=[...npcs].sort(()=>Math.random()-.5);
- pool.slice(0,playerIsImp?1:2).forEach(q=>q.role='impostor');
+ pool.slice(0,1).forEach(q=>q.role='impostor');
  updateRoleUI();
 }
 function updateRoleUI(){
@@ -213,7 +213,22 @@ function drawEjection(e){
 function draw(){
  x.clearRect(0,0,W,H);x.fillStyle='#061018';x.fillRect(0,0,W,H);
  rr(sx(-900),sy(-500),1700,1050,50,'#14242c');rr(sx(-870),sy(-470),1640,990,38,'#263943');
- rooms.forEach(r=>{rr(sx(r.x),sy(r.y),r.w,r.h,24,'#1a2a33');x.strokeStyle='#405864';x.lineWidth=3;x.stroke();x.fillStyle='#8fa6b2';x.font='900 18px system-ui';x.textAlign='center';x.fillText(r.n,sx(r.x+r.w/2),sy(r.y+30));});
+ rooms.forEach(r=>{
+ rr(sx(r.x),sy(r.y),r.w,r.h,24,'#17262e');
+ // 金属壁の外枠
+ x.strokeStyle='#657c86';x.lineWidth=7;x.strokeRect(sx(r.x+3),sy(r.y+3),r.w-6,r.h-6);
+ x.strokeStyle='#263d47';x.lineWidth=3;x.strokeRect(sx(r.x+11),sy(r.y+11),r.w-22,r.h-22);
+ // 壁パネルの継ぎ目
+ x.strokeStyle='#314a55';x.lineWidth=2;
+ for(let px=r.x+55;px<r.x+r.w-30;px+=95){x.beginPath();x.moveTo(sx(px),sy(r.y+5));x.lineTo(sx(px),sy(r.y+22));x.stroke();x.beginPath();x.moveTo(sx(px),sy(r.y+r.h-5));x.lineTo(sx(px),sy(r.y+r.h-22));x.stroke();}
+ for(let py=r.y+70;py<r.y+r.h-30;py+=82){x.beginPath();x.moveTo(sx(r.x+5),sy(py));x.lineTo(sx(r.x+22),sy(py));x.stroke();x.beginPath();x.moveTo(sx(r.x+r.w-5),sy(py));x.lineTo(sx(r.x+r.w-22),sy(py));x.stroke();}
+ // 天井側の細い照明
+ x.fillStyle='#75d5e8';x.globalAlpha=.55;x.fillRect(sx(r.x+35),sy(r.y+12),r.w-70,3);x.globalAlpha=1;
+ // 壁のボルト
+ x.fillStyle='#9aacb3';
+ [[r.x+20,r.y+20],[r.x+r.w-20,r.y+20],[r.x+20,r.y+r.h-20],[r.x+r.w-20,r.y+r.h-20]].forEach(v=>{x.beginPath();x.arc(sx(v[0]),sy(v[1]),2.5,0,Math.PI*2);x.fill()});
+ x.fillStyle='#8fa6b2';x.font='900 18px system-ui';x.textAlign='center';x.fillText(r.n,sx(r.x+r.w/2),sy(r.y+38));
+});
 function drawDoor(g,closed=false){
  const px=sx(g.x),py=sy(g.y),w=g.w,h=g.h;
  x.save();
