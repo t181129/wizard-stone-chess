@@ -214,9 +214,57 @@ function draw(){
  x.clearRect(0,0,W,H);x.fillStyle='#061018';x.fillRect(0,0,W,H);
  rr(sx(-900),sy(-500),1700,1050,50,'#14242c');rr(sx(-870),sy(-470),1640,990,38,'#263943');
  rooms.forEach(r=>{rr(sx(r.x),sy(r.y),r.w,r.h,24,'#1a2a33');x.strokeStyle='#405864';x.lineWidth=3;x.stroke();x.fillStyle='#8fa6b2';x.font='900 18px system-ui';x.textAlign='center';x.fillText(r.n,sx(r.x+r.w/2),sy(r.y+30));});
-roomDoors.forEach(g=>{rr(sx(g.x),sy(g.y),g.w,g.h,7,'#314a56');x.strokeStyle='#69a8ba';x.lineWidth=2;x.strokeRect(sx(g.x),sy(g.y),g.w,g.h)});
+function drawDoor(g,closed=false){
+ const px=sx(g.x),py=sy(g.y),w=g.w,h=g.h;
+ x.save();
+ const vertical=h>w;
+ // 壁の中に埋め込まれた重厚なドア枠
+ x.shadowColor='#000';x.shadowBlur=8;
+ const frame=x.createLinearGradient(px,py,px+w,py+h);
+ frame.addColorStop(0,'#18262d');frame.addColorStop(.45,'#718791');frame.addColorStop(.55,'#354952');frame.addColorStop(1,'#111b20');
+ x.fillStyle=frame;x.fillRect(px-7,py-7,w+14,h+14);
+ x.shadowBlur=0;
+ x.strokeStyle='#9bb5bf';x.lineWidth=2;x.strokeRect(px-4,py-4,w+8,h+8);
+ if(vertical){
+   const mid=px+w/2;
+   // 上下のレール
+   x.fillStyle='#0d171c';x.fillRect(px+7,py-9,w-14,6);x.fillRect(px+7,py+h+3,w-14,6);
+   if(closed){
+     const dg=x.createLinearGradient(px,py,px+w,py);
+     dg.addColorStop(0,'#536872');dg.addColorStop(.5,'#24353d');dg.addColorStop(1,'#536872');
+     x.fillStyle=dg;x.fillRect(px+5,py+2,w/2-5,h-4);x.fillRect(mid,py+2,w/2-5,h-4);
+     x.strokeStyle='#9fb3ba';x.lineWidth=1;x.beginPath();x.moveTo(mid,py+3);x.lineTo(mid,py+h-3);x.stroke();
+   }else{
+     x.fillStyle='#081217';x.fillRect(px+9,py+2,w-18,h-4);
+     x.strokeStyle='#49616c';x.lineWidth=2;x.strokeRect(px+9,py+2,w-18,h-4);
+     x.fillStyle='#65d8ed';x.globalAlpha=.18;x.fillRect(px+13,py+6,w-26,h-12);x.globalAlpha=1;
+   }
+ }else{
+   const mid=py+h/2;
+   // 左右のレール
+   x.fillStyle='#0d171c';x.fillRect(px-9,py+7,6,h-14);x.fillRect(px+w+3,py+7,6,h-14);
+   if(closed){
+     const dg=x.createLinearGradient(px,py,px,py+h);
+     dg.addColorStop(0,'#536872');dg.addColorStop(.5,'#24353d');dg.addColorStop(1,'#536872');
+     x.fillStyle=dg;x.fillRect(px+2,py+5,w-4,h/2-5);x.fillRect(px+2,mid,w-4,h/2-5);
+     x.strokeStyle='#9fb3ba';x.lineWidth=1;x.beginPath();x.moveTo(px+3,mid);x.lineTo(px+w-3,mid);x.stroke();
+   }else{
+     x.fillStyle='#081217';x.fillRect(px+2,py+9,w-4,h-18);
+     x.strokeStyle='#49616c';x.lineWidth=2;x.strokeRect(px+2,py+9,w-4,h-18);
+     x.fillStyle='#65d8ed';x.globalAlpha=.18;x.fillRect(px+7,py+13,w-14,h-26);x.globalAlpha=1;
+   }
+ }
+ // 警告ランプ
+ x.fillStyle=closed?'#ef4b4b':'#46d98a';x.beginPath();x.arc(px+w/2,py+h/2,3.5,0,Math.PI*2);x.fill();
+ x.shadowColor=closed?'#ff3d3d':'#4dffab';x.shadowBlur=closed?10:5;x.fill();x.shadowBlur=0;
+ x.restore();
+}
+roomDoors.forEach(g=>drawDoor(g,false));
  tasks.forEach((t,i)=>{if(i>=done&&!(i===1&&props.some(p=>p.type==='breaker'&&p.task===1)))terminal(t)});props.forEach(drawProp); vents.forEach((v,i)=>{let px=sx(v[0]),py=sy(v[1]);x.beginPath();x.ellipse(px,py,28,14,0,0,7);x.fillStyle='#111b20';x.fill();x.strokeStyle='#667983';x.lineWidth=3;x.stroke();if(i===0&&sabotage){x.fillStyle='#ff5050';x.globalAlpha=.55;x.beginPath();x.arc(px,py,34,0,7);x.fill();x.globalAlpha=1}});
- npcs.forEach(q=>{if(q.alive)person(q)});Object.values(remotePlayers).forEach(q=>{if(q.id!==myPlayerId&&q.alive!==false)person({...q,name:q.name||'PLAYER'},true)});doors.forEach(r=>{rr(sx(r[0]),sy(r[1]),r[2],r[3],5,'#b84a3c')});bodies.forEach(q=>drawBody(q));ejections.forEach(e=>drawEjection(e));
+ npcs.forEach(q=>{if(q.alive)person(q)});Object.values(remotePlayers).forEach(q=>{if(q.id!==myPlayerId&&q.alive!==false)person({...q,name:q.name||'PLAYER'},true)});doors.forEach(r=>{
+ const g={x:r[0],y:r[1],w:r[2],h:r[3]};
+ drawDoor(g,true);
+});bodies.forEach(q=>drawBody(q));ejections.forEach(e=>drawEjection(e));
  if(player.alive)person({...player,name:'YOU'});
 }
 function distXY(a,b){return Math.hypot(a.x-b[0],a.y-b[1])}
