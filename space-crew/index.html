@@ -51,7 +51,7 @@ const roomDoors=[
  {x:250,y:-20,w:34,h:70}, // Oxygen
  {x:-280,y:30,w:70,h:34}, // Engine
  {x:100,y:30,w:70,h:34}, // Navigation
- {x:390,y:180,w:34,h:70} // Storage
+ {x:350,y:180,w:74,h:70} // Storage
 ];
 function nearRoomDoor(px,py){return roomDoors.some(d=>px>=d.x-12&&px<=d.x+d.w+12&&py>=d.y-12&&py<=d.y+d.h+12)}
 function roomAt(px,py){return rooms.find(r=>px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h)||null}
@@ -59,10 +59,13 @@ function pointInsideRoom(px,py,r){return px>r.x+8&&px<r.x+r.w-8&&py>r.y+8&&py<r.
 function canMoveTo(fromX,fromY,toX,toY){
  const from=roomAt(fromX,fromY),to=roomAt(toX,toY);
  if(from===to)return true;
- // 部屋の外へ出る/別の部屋へ入るときは、ドア付近だけ許可
+ // 部屋をまたぐ移動は、移動線がドアを通っている場合だけ許可
  if(nearRoomDoor(fromX,fromY)||nearRoomDoor(toX,toY))return true;
- // 廊下同士の移動は許可
- if(!from&&!to)return true;
+ const steps=8;
+ for(let i=1;i<=steps;i++){
+   const t=i/steps,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
+   if(nearRoomDoor(px,py))return true;
+ }
  return false;
 }
 function roomOf(q){const r=rooms.find(r=>q.x>=r.x&&q.x<=r.x+r.w&&q.y>=r.y&&q.y<=r.y+r.h);return r?r.n:'Corridor'}
@@ -258,7 +261,7 @@ if(activeTask&&taskStage>=3){done++;activeTask=null;taskStage=0;document.getElem
  if(isHost&&aiTimer%6===0)broadcastState();draw();requestAnimationFrame(update)
 }
 c.addEventListener('pointerdown',e=>{if(ended||meeting)return;drag=true;last={x:e.clientX,y:e.clientY}});
-c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;player.x=Math.max(-850,Math.min(750,player.x+dx*.65));player.y=Math.max(-450,Math.min(500,player.y+dy*.65));cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
+c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;const nx=Math.max(-850,Math.min(750,player.x+dx*.52)),ny=Math.max(-450,Math.min(500,player.y+dy*.52));if(canMoveTo(player.x,player.y,nx,ny)){player.x=nx;player.y=ny}cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
 c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
 updateRoleUI();
 update();
