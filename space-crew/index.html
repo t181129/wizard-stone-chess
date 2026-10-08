@@ -370,30 +370,107 @@ function updateEjections(){
 function closestBody(){let b=null,bd=999;for(const q of bodies){let z=Math.hypot(player.x-q.x,player.y-q.y);if(z<bd){bd=z;b=q}}return bd<=44?b:null}
 function checkWin(){if(player.role==='インポスター'&&npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','クルーを全員見つけた！');return true}if(done>=tasks.length){end('CREW WIN!','全タスク完了！');return true}if(npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','インポスターがクルーを上回った！');return true}return false}
 function renderChat(){const el=document.getElementById('chatlog');el.innerHTML=chatMessages.map(m=>'<div class="chatline"><b>'+m.n+'</b>：'+m.t+'</div>').join('');el.scrollTop=el.scrollHeight}
+let meetingVotes={};
+let meetingResolving=false;
+let aiMeetingCooldown=0;
+
+function aiChooseVote(q){
+ const candidates=npcs.filter(z=>z.alive&&z.id!==q.id&&z.role!=='impostor');
+ if(player.alive&&player.role!=='インポスター')candidates.push({id:0,name:'YOU',x:player.x,y:player.y,role:'crew',alive:true});
+ if(!candidates.length)return 'skip';
+ const body=nearestBodyTo(q);
+ if(body){
+  const victim=npcs.find(z=>z.name===body.name);
+  if(victim&&victim.alive&&victim.role!=='impostor')return victim.id;
+ }
+ // 距離・部屋・ランダム性を合わせてAIごとに判断
+ let best=candidates[0],bestScore=-Infinity;
+ candidates.forEach(z=>{
+  let score=Math.random()*3;
+  const d=Math.hypot(z.x-q.x,z.y-q.y);
+  score+=(260-Math.min(d,260))/130;
+  if(roomOf(z)===roomOf(q))score+=1.2;
+  if(z.id===0)score+=Math.random()<.35?2:0;
+  if(score>bestScore){bestScore=score;best=z;}
+ });
+ return best.id;
+}
+
 function openMeeting(reason='会議が始まりました。'){
- if(ended)return;meeting=true;document.getElementById('meetingText').textContent=reason;document.getElementById('meeting').style.display='flex';renderChat();if(aiMode)setTimeout(aiMeeting,250);const v=document.getElementById('votes');v.innerHTML='';
- const people=[...npcs.filter(q=>q.alive),...(player.alive?[{id:0,name:'YOU',color:player.color,role:'crew',alive:true}]:[])];
- people.forEach(q=>{let b=document.createElement('button');b.textContent=q.name;b.onclick=()=>vote(q.id);v.appendChild(b)});
+ if(ended)return;
+ meeting=true;meetingResolving=false;meetingVotes={};
+ document.getElementById('meetingText').textContent=reason;
+ document.getElementById('meeting').style.display='flex';
+ renderChat();
+ const v=document.getElementById('votes');v.innerHTML='';
+ const people=[...npcs.filter(q=>q.alive),...(player.alive?[{id:0,name:'YOU',color:player.color,role:player.role,alive:true}]:[])];
+ people.forEach(q=>{
+  let b=document.createElement('button');b.textContent=q.name;
+  b.onclick=()=>vote(q.id);v.appendChild(b)
+ });
+ // AIは会議開始直後から、それぞれ独立して考えて投票
+ if(aiMode)setTimeout(()=>{
+  if(!meeting||ended)return;
+  npcs.filter(q=>q.alive).forEach(q=>{meetingVotes[q.id]=aiChooseVote(q)});
+  renderChat();
+ },500);
 }
-function vote(id){
- const target=npcs.find(q=>q.id===id);
- const box=document.getElementById('voteResult');box.textContent='投票集計中…';box.style.display='block';
- const buttons=[...document.querySelectorAll('#votes button')];buttons.forEach((b,i)=>{b.disabled=true;b.style.transform='scale(.96)'});
+
+function resolveMeeting(){
+ if(!meeting||meetingResolving)return;
+ const counts={};
+ Object.values(meetingVotes).forEach(id=>{counts[id]=(counts[id]||0)+1});
+ let winner='skip',max=0,tie=false;
+ Object.entries(counts).forEach(([id,n])=>{
+  if(n>max){winner=id;max=n;tie=false}
+  else if(n===max&&n>0){tie=true}
+ });
+ if(tie)winner='skip';
+ meetingResolving=true;
+ const target=winner==='skip'?null:npcs.find(q=>String(q.id)===String(winner))||(String(winner)==='0'?player:null);
+ const box=document.getElementById('voteResult');
+ box.textContent=target?'🗳️ '+target.name+' に '+max+'票！':'🗳️ 投票はスキップ／同数票！';
+ box.style.display='block';
+ box.animate([{transform:'scale(.6)',opacity:0},{transform:'scale(1.12)',opacity:1},{transform:'scale(1)',opacity:1}],{duration:700});
  setTimeout(()=>{
-   const chosen=target?target.name:'スキップ';
-   box.textContent='🗳️ '+chosen+' に投票が集まった！';
-   box.animate([{transform:'scale(.6)',opacity:0},{transform:'scale(1.12)',opacity:1},{transform:'scale(1)',opacity:1}],{duration:700});
-   setTimeout(()=>{
-     document.getElementById('meeting').style.display='none';meeting=false;
-     if(target){eject(target);setLog(target.name+'が追放された。');if(target.role==='impostor'){end('CREW WIN!','インポスターを見つけた！');return}}
-     else setLog('投票はスキップされた。');
-     checkWin();setTimeout(()=>setLog('会議終了。クルーは再び行動開始。'),650);
-   },1200);
- },900);
+  document.getElementById('meeting').style.display='none';meeting=false;meetingResolving=false;
+  if(target){
+   eject(target);
+   setLog(target.name+'が投票で追放された。');
+   if(target.role==='インポスター'){end('CREW WIN!','インポスターを見つけた！');return}
+  }else setLog('投票はスキップされた。');
+  checkWin();setTimeout(()=>setLog('会議終了。クルーは再び行動開始。'),650);
+ },1200);
 }
+
+function vote(id){
+ if(!meeting||meetingResolving)return;
+ meetingVotes[0]=id;
+ const buttons=[...document.querySelectorAll('#votes button')];buttons.forEach(b=>{b.disabled=true;b.style.transform='scale(.96)'});
+ document.getElementById('voteResult').textContent='🗳️ AIも投票を考えています…';
+ document.getElementById('voteResult').style.display='block';
+ setTimeout(resolveMeeting,900);
+}
+
+function aiCanCallMeeting(){
+ if(!aiMode||ended||meeting||aiMeetingCooldown>0)return false;
+ const alive=npcs.filter(q=>q.alive);
+ const body=alive.some(q=>nearestBodyTo(q)&&Math.hypot(nearestBodyTo(q).x-q.x,nearestBodyTo(q).y-q.y)<90);
+ if(body)return true;
+ return Math.random()<0.025;
+}
+
+function aiMaybeCallMeeting(){
+ if(!aiCanCallMeeting())return;
+ const q=npcs.filter(z=>z.alive)[Math.floor(Math.random()*npcs.filter(z=>z.alive).length)];
+ if(!q)return;
+ aiMeetingCooldown=8;
+ openMeeting('📢 '+q.name+' が緊急会議を開きました。');
+}
+
 document.getElementById('report').onclick=()=>{if(closestBody())openMeeting('死体が通報されました。');else setLog('近くに通報できる死体がありません。')};
 document.getElementById('meetingBtn').onclick=()=>openMeeting('緊急会議が招集されました。');
-setInterval(()=>{if(!ended&&Math.random()<.18)closeDoors()},7000);
+setInterval(()=>{if(aiMeetingCooldown>0)aiMeetingCooldown--;if(!ended&&aiMode)aiMaybeCallMeeting();if(!ended&&Math.random()<.18)closeDoors()},7000);
 document.getElementById('skip').onclick=()=>{document.getElementById('meeting').style.display='none';meeting=false;setLog('投票をスキップしました。')};
 document.getElementById('chatSend').onclick=()=>{const input=document.getElementById('chatInput');if(input.value.trim()){chatMessages.push({n:'YOU',t:input.value.trim()});input.value='';renderChat();setTimeout(()=>{if(meeting){const alive=npcs.filter(q=>q.alive);const q=alive[Math.floor(Math.random()*alive.length)];if(q){chatMessages.push({n:q.name,t:['私は怪しいと思う人がいる。','さっき通信室にいたよ。','誰かベントを見た？','証拠を確認しよう。'][Math.floor(Math.random()*4)]});renderChat()}}},500)}};
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('chatSend').click()});
