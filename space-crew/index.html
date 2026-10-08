@@ -455,7 +455,7 @@ function update(){
  }
 }
 if(activeTask&&taskStage>=3){done++;activeTask=null;taskStage=0;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog(tasks[done-1][2]+'タスク完了！');checkWin()}
-  let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(!ghost&&!vented&&imp&&bodyContact(imp,player)&&killCooldown===0){bodies.push({x:player.x,y:player.y,color:player.color,name:'YOU'});player.alive=false;ghost=true;setLog('👻 ゴーストになった！ 死体が残った。');}
+  let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(player.role!=='インポスター'&&!ghost&&!vented&&imp&&bodyContact(imp,player)&&killCooldown===0){bodies.push({x:player.x,y:player.y,color:player.color,name:'YOU'});player.alive=false;ghost=true;setLog('👻 ゴーストになった！ 死体が残った。');}
  }
  if(isHost&&aiTimer%6===0)broadcastState();draw();requestAnimationFrame(update)
 }
