@@ -96,7 +96,38 @@ const roomProps=[
  {type:'console',name:'Nav Map',x:100,y:150,w:90,h:48,solid:true},
  {type:'server',name:'Nav Computer',x:300,y:320,w:55,h:85,solid:true},
  {type:'crate',name:'Nav Equipment',x:-80,y:390,w:65,h:55,solid:true},
- {type:'table',name:'Nav Workbench',x:350,y:150,w:100,h:45,solid:true}
+ {type:'table',name:'Nav Workbench',x:350,y:150,w:100,h:45,solid:true},
+ {type:'server',name:'Aux Server',x:-180,y:-250,w:50,h:90,solid:true},
+ {type:'cable',name:'Loose Cable',x:-90,y:-210,w:75,h:30,solid:true},
+ {type:'crate',name:'Spare Parts',x:-360,y:-180,w:60,h:52,solid:true},
+ {type:'console',name:'Power Readout',x:-210,y:-180,w:75,h:45,solid:true},
+ {type:'tank',name:'Emergency Tank',x:360,y:-170,w:38,h:76,solid:true},
+ {type:'crate',name:'Oxygen Supplies',x:590,y:-180,w:65,h:50,solid:true},
+ {type:'server',name:'Pump Controller',x:450,y:-110,w:50,h:82,solid:true},
+ {type:'table',name:'Tool Bench',x:-620,y:250,w:105,h:46,solid:true},
+ {type:'crate',name:'Tool Box',x:-720,y:300,w:60,h:48,solid:true},
+ {type:'console',name:'Engine Readout',x:-560,y:180,w:80,h:45,solid:true},
+ {type:'pipe',name:'Fuel Pipe',x:-350,y:300,w:140,h:30,solid:true},
+ {type:'crate',name:'Machine Parts',x:-280,y:410,w:65,h:50,solid:true},
+ {type:'server',name:'Nav Relay',x:60,y:280,w:50,h:85,solid:true},
+ {type:'cable',name:'Nav Cable',x:160,y:400,w:90,h:30,solid:true},
+ {type:'table',name:'Storage Bench',x:520,y:130,w:110,h:48,solid:true},
+ {type:'crate',name:'Storage Box',x:690,y:170,w:70,h:58,solid:true},
+ {type:'crate',name:'Storage Box',x:570,y:350,w:70,h:58,solid:true},
+ {type:'server',name:'Storage Terminal',x:470,y:410,w:52,h:82,solid:true},
+ {type:'med',name:'Med Drawer',x:720,y:-120,w:58,h:70,solid:true},
+ {type:'table',name:'Med Cart',x:880,y:-180,w:75,h:45,solid:true},
+ {type:'console',name:'Vitals Monitor',x:940,y:-100,w:70,h:45,solid:true},
+ {type:'crate',name:'Medical Box',x:820,y:-240,w:60,h:48,solid:true},
+ {type:'server',name:'Security Console',x:-930,y:-390,w:52,h:82,solid:true},
+ {type:'cable',name:'Security Cable',x:-760,y:-390,w:80,h:30,solid:true},
+ {type:'crate',name:'Evidence Case',x:-1010,y:-330,w:60,h:48,solid:true},
+ {type:'table',name:'Cafe Counter',x:-760,y:300,w:120,h:45,solid:true},
+ {type:'crate',name:'Drink Crate',x:-600,y:450,w:65,h:50,solid:true},
+ {type:'console',name:'Kitchen Panel',x:-920,y:420,w:75,h:45,solid:true},
+ {type:'tank',name:'Reactor Coolant',x:620,y:330,w:40,h:80,solid:true},
+ {type:'console',name:'Reactor Gauge',x:760,y:300,w:75,h:45,solid:true},
+ {type:'crate',name:'Reactor Parts',x:920,y:420,w:65,h:52,solid:true}
 ];
 const props=[
  {type:'breaker',name:'Main Breaker',x:-150,y:-275,w:58,h:78,solid:true,task:1},
@@ -170,8 +201,34 @@ function updateLocationName(){const el=document.getElementById('locationName');i
 function nearestCrew(q){return npcs.filter(z=>z.alive&&z.role==='crew').sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
 function nearestBodyTo(q){return bodies.slice().sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
 function aiChat(q){const m=aiInit(q);const lines=q.role==='impostor'?['今の動き、少し気になる。','自分はタスクをしていたよ。','死体の場所を確認しよう。','誰か怪しい動きを見た？']:['私は今のところ普通にタスク中。','さっき '+roomOf(q)+' にいたよ。','死体を見つけたら報告しよう。','誰かの行動を見ていた人いる？'];chatMessages.push({n:q.name,t:lines[m.chatSeed++%lines.length]});renderChat()}
-function aiChooseVote(q){const alive=npcs.filter(z=>z.alive&&z.id!==q.id&&z.role!=='impostor');if(!alive.length)return null;const b=nearestBodyTo(q);if(b){const victim=npcs.find(z=>z.name===b.name);if(victim&&victim.role==='crew')return victim.id}return alive.sort((a,b)=>{const sa=Math.hypot(a.x-q.x,a.y-q.y),sb=Math.hypot(b.x-q.x,b.y-q.y);return sa-sb})[0].id}
-function aiMeeting(){if(!aiMode||ended)return;const alive=npcs.filter(q=>q.alive);alive.forEach(q=>{const m=aiInit(q);m.chatSeed++;if(Math.random()<.7)aiChat(q)});setTimeout(()=>{if(!meeting||ended)return;const voter=alive.find(q=>q.role==='crew');if(voter){const id=aiChooseVote(voter);if(id!==null){const t=npcs.find(z=>z.id===id);if(t){chatMessages.push({n:voter.name,t:t.name+'が少し怪しいと思う。'});renderChat()}}}},700)}
+function aiChooseVote(q){
+ const candidates=npcs.filter(z=>z.alive&&z.id!==q.id);
+ if(player.alive&&player.id!==q.id)candidates.push({id:0,name:'YOU',x:player.x,y:player.y,role:player.role,alive:true});
+ if(!candidates.length)return 'skip';
+ let best='skip',bestScore=-999;
+ candidates.forEach(z=>{
+  let score=Math.random()*3;
+  const d=Math.hypot(z.x-q.x,z.y-q.y);
+  score+=(260-Math.min(d,260))/130;
+  if(roomOf(z)===roomOf(q))score+=1.5;
+  const body=nearestBodyTo(q);
+  if(body&&z.name===body.name)score+=5;
+  if(z.role==='インポスター'||z.role==='impostor')score-=8;
+  if(z.id===0&&player.role!=='インポスター')score+=Math.random()*2;
+  if(score>bestScore){bestScore=score;best=z.id}
+ });
+ return best;
+}
+function aiMeeting(){
+ if(!aiMode||ended||!meeting)return;
+ const alive=npcs.filter(q=>q.alive);
+ alive.forEach(q=>{
+  const m=aiInit(q);m.chatSeed++;
+  if(Math.random()<.75)aiChat(q);
+  meetingVotes[q.id]=aiChooseVote(q);
+ });
+ renderChat();
+}
 
 function multiLog(t){const e=document.getElementById('multiStatus');if(e)e.textContent=t}
 function makeCode(){return Math.random().toString(36).slice(2,8).toUpperCase()}
@@ -506,15 +563,19 @@ function repairSabotage(){if(!sabotage)return;sabotage=false;sabLeft=0;document.
 function useVent(){if(ended||meeting)return;let near=vents.find(v=>bodyTouchesPoint(player,v[0],v[1],8));if(near){vented=!vented;setLog(vented?'ベントに隠れた。':'ベントから出た。');}else setLog('近くにベントがありません。');}
 document.getElementById('ventBtn').onclick=useVent;
 document.getElementById('sabotage').onclick=repairSabotage;
+function sameActionSpace(a,b){
+ const ra=roomOf(a),rb=roomOf(b);
+ return ra===rb;
+}
 function playerImpostorAction(){
  if(player.role!=='インポスター'||!player.alive||meeting||ended||playerImpostorKillCooldown>0)return;
- const target=npcs.find(z=>z.alive&&z.role==='crew'&&bodyContact(z,player));
+ const target=npcs.find(z=>z.alive&&z.role==='crew'&&sameActionSpace(z,player)&&bodyContact(z,player));
  if(target){kill(target);playerImpostorKillCooldown=180;setLog(target.name+'が倒れた。');checkWin();}else{setLog('近くにターゲットがいません。');}
 }
 document.getElementById('killBtn').onclick=playerImpostorAction;
 function impostorAttack(q){
  if(killCooldown>0)return;
- const target=npcs.find(z=>z.alive&&z.role==='crew'&&bodyContact(z,q));
+ const target=npcs.find(z=>z.alive&&z.role==='crew'&&sameActionSpace(z,q)&&bodyContact(z,q));
  if(target){kill(target);killCooldown=180;setLog(q.name+'のキルクールダウン開始');}
 }
 function moveAI(){
