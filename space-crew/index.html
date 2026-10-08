@@ -95,10 +95,25 @@ function canMoveAroundProps(fromX,fromY,toX,toY){
  return true;
 }
 function nearRoomDoor(px,py){return roomDoors.some(d=>px>=d.x-12&&px<=d.x+d.w+12&&py>=d.y-12&&py<=d.y+d.h+12)}
+function closedDoorHit(px,py,r=22){
+ return doors.some(d=>{
+  const [dx,dy,dw,dh]=d;
+  return px+r>dx&&px-r<dx+dw&&py+r>dy&&py-r<dy+dh;
+ });
+}
+function closedDoorPathHit(fromX,fromY,toX,toY){
+ const steps=10;
+ for(let i=0;i<=steps;i++){
+  const t=i/steps,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
+  if(closedDoorHit(px,py,22))return true;
+ }
+ return false;
+}
 function roomAt(px,py){return rooms.find(r=>px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h)||null}
 function pointInsideRoom(px,py,r){return px>r.x+8&&px<r.x+r.w-8&&py>r.y+8&&py<r.y+r.h-8}
 function canMoveTo(fromX,fromY,toX,toY){
  const from=roomAt(fromX,fromY),to=roomAt(toX,toY);
+ if(closedDoorPathHit(fromX,fromY,toX,toY))return false;
  if(!canMoveAroundProps(fromX,fromY,toX,toY))return false;
  if(from===to)return true;
  if(nearRoomDoor(fromX,fromY)||nearRoomDoor(toX,toY))return true;
@@ -367,7 +382,7 @@ function moveAI(){
   if(q.role==='impostor'){
    if(Math.random()<0.002)sabotageNow();
    let target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-q.x,z.y-q.y)<260);
-   if(target){let dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;q.x+=dx/L*.52;q.y+=dy/L*.65;
+   if(target){let dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;const nx=q.x+dx/L*.52,ny=q.y+dy/L*.65;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny};
     if(Math.hypot(q.x-target.x,q.y-target.y)<34){impostorAttack(q);q.x-=8;}
    }else{const nx=q.x+Math.sin(Date.now()/900+q.id)*.35,ny=q.y+Math.cos(Date.now()/1000+q.id)*.35;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}}
   }else{
