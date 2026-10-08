@@ -57,6 +57,20 @@ const roomDoors=[
  {x:-930,y:248,w:70,h:28},  // Cafeteria top
  {x:660,y:248,w:70,h:28}    // Reactor top
 ];
+const roomProps=[
+ {type:'console',name:'Security Monitor',x:-970,y:-430,w:90,h:55,solid:true},
+ {type:'server',name:'Security Rack',x:-835,y:-430,w:55,h:105,solid:true},
+ {type:'crate',name:'Security Case',x:-940,y:-330,w:70,h:55,solid:true},
+ {type:'med',name:'Med Cabinet',x:770,y:-430,w:60,h:80,solid:true},
+ {type:'table',name:'Med Table',x:900,y:-330,w:120,h:48,solid:true},
+ {type:'crate',name:'Med Supply',x:735,y:-330,w:60,h:50,solid:true},
+ {type:'table',name:'Cafe Table',x:-970,y:350,w:105,h:45,solid:true},
+ {type:'table',name:'Cafe Table',x:-835,y:430,w:105,h:45,solid:true},
+ {type:'crate',name:'Cafe Crate',x:-970,y:465,w:65,h:50,solid:true},
+ {type:'engine',name:'Reactor Core',x:700,y:390,w:130,h:125,solid:true},
+ {type:'pipe',name:'Reactor Pipe',x:560,y:465,w:170,h:32,solid:true},
+ {type:'server',name:'Reactor Control',x:840,y:330,w:55,h:100,solid:true}
+];
 const props=[
  {type:'breaker',name:'Main Breaker',x:-150,y:-275,w:58,h:78,solid:true,task:1},
  {type:'server',name:'Server Rack',x:-650,y:-220,w:62,h:92,solid:true},
@@ -165,8 +179,11 @@ function assignRoles(){
  const playerIsImp=Math.random()<2/7;
  player.role=playerIsImp?'インポスター':'技術員';
  npcs.forEach(q=>q.role='crew');
- const pool=[...npcs].sort(()=>Math.random()-.5);
- pool.slice(0,1).forEach(q=>q.role='impostor');
+ // インポスターは必ず合計1人。プレイヤーがインポスターならNPCは全員クルー。
+ if(!playerIsImp){
+  const pool=[...npcs].sort(()=>Math.random()-.5);
+  pool[0].role='impostor';
+ }
  updateRoleUI();
 }
 function updateRoleUI(){
@@ -195,6 +212,26 @@ function person(q,label=true){
  x.globalAlpha=.3;x.fillStyle='#d5f6ff';x.beginPath();x.ellipse(-6,-35,6,2,0,0,7);x.fill();x.globalAlpha=1;
  x.fillStyle='#26343b';x.fillRect(-28,-8,7,25);x.fillRect(21,-8,7,25);x.fillRect(-15,12,11,14);x.fillRect(4,12,11,14);x.restore();
  if(label){x.fillStyle='#fff';x.font='bold 12px system-ui';x.textAlign='center';x.fillText(q.name||'YOU',px,py+48)}
+}
+function drawRoomClutter(){
+ roomProps.forEach(p=>drawProp(p));
+ // 配管・ケーブル・床のボルトで各部屋を不規則に見せる
+ const clutter=[
+  [-740,-470,-650,-470],[-560,-470,-470,-450],[-250,-330,-160,-330],
+  [350,-330,450,-330],[520,-310,620,-310],[-760,400,-680,400],
+  [-500,420,-410,420],[240,420,330,420],[420,450,500,450]
+ ];
+ x.save();x.lineCap='round';
+ clutter.forEach((c,i)=>{
+  x.strokeStyle=i%2?'#8b6d45':'#536f7b';x.lineWidth=7;
+  x.beginPath();x.moveTo(sx(c[0]),sy(c[1]));x.bezierCurveTo(sx(c[0]+20),sy(c[1]-18),sx(c[2]-20),sy(c[3]+18),sx(c[2]),sy(c[3]));x.stroke();
+  x.strokeStyle='#18282f';x.lineWidth=2;x.stroke();
+ });
+ x.fillStyle='#8799a0';
+ [[-730,-410],[-450,-410],[-210,-300],[360,-300],[590,-210],[-720,370],[-450,470],[300,470],[600,350]].forEach(p=>{
+  x.beginPath();x.arc(sx(p[0]),sy(p[1]),3,0,Math.PI*2);x.fill();
+ });
+ x.restore();
 }
 function drawProp(p){
  const px=sx(p.x),py=sy(p.y);x.save();x.translate(px,py);
@@ -306,7 +343,7 @@ function drawDoor(g,closed=false){
  x.restore();
 }
 roomDoors.forEach(g=>drawDoor(g,false));
- tasks.forEach((t,i)=>{if(i>=done&&!(i===1&&props.some(p=>p.type==='breaker'&&p.task===1)))terminal(t)});props.forEach(drawProp); vents.forEach((v,i)=>{let px=sx(v[0]),py=sy(v[1]);x.beginPath();x.ellipse(px,py,28,14,0,0,7);x.fillStyle='#111b20';x.fill();x.strokeStyle='#667983';x.lineWidth=3;x.stroke();if(i===0&&sabotage){x.fillStyle='#ff5050';x.globalAlpha=.55;x.beginPath();x.arc(px,py,34,0,7);x.fill();x.globalAlpha=1}});
+ tasks.forEach((t,i)=>{if(i>=done&&!(i===1&&props.some(p=>p.type==='breaker'&&p.task===1)))terminal(t)});props.forEach(drawProp);drawRoomClutter(); vents.forEach((v,i)=>{let px=sx(v[0]),py=sy(v[1]);x.beginPath();x.ellipse(px,py,28,14,0,0,7);x.fillStyle='#111b20';x.fill();x.strokeStyle='#667983';x.lineWidth=3;x.stroke();if(i===0&&sabotage){x.fillStyle='#ff5050';x.globalAlpha=.55;x.beginPath();x.arc(px,py,34,0,7);x.fill();x.globalAlpha=1}});
  npcs.forEach(q=>{if(q.alive)person(q)});Object.values(remotePlayers).forEach(q=>{if(q.id!==myPlayerId&&q.alive!==false)person({...q,name:q.name||'PLAYER'},true)});doors.forEach(r=>{
  const g={x:r[0],y:r[1],w:r[2],h:r[3]};
  drawDoor(g,true);
