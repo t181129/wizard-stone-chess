@@ -1,4 +1,134 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Space Crew</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#061018;color:#fff;font-family:system-ui,sans-serif}canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+#ui{position:fixed;inset:0;pointer-events:none}.top{position:absolute;top:10px;left:50%;transform:translateX(-50%);font-weight:900;font-size:clamp(22px,5vw,34px);text-shadow:0 3px 8px #000}
+.card{position:absolute;left:10px;top:10px;background:#07121bdd;border:1px solid #526a77;border-radius:12px;padding:10px;min-width:175px;pointer-events:auto}.right{left:auto;right:10px}.bottom{top:auto;bottom:10px}
+button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:white;font-weight:800;margin:3px 0}.danger{background:#b52d38}.small{font-size:12px;color:#bfd0d8;line-height:1.45}
+#meeting,#end{display:none;position:absolute;inset:0;background:#000b;pointer-events:auto;align-items:center;justify-content:center}.box{width:min(430px,92vw);max-height:90vh;overflow:auto;background:#0a151c;border:1px solid #617c8a;border-radius:18px;padding:20px;text-align:center}.votes{display:grid;grid-template-columns:1fr 1fr;gap:7px}.votes button{background:#253e4b}.selected{outline:3px solid #5bd0ff}.hidden{display:none}
+.bar{height:9px;background:#1a2930;border-radius:9px;overflow:hidden;margin-top:5px}.fill{height:100%;width:0;background:#31b6e8}
 
+#sabotage{display:none;position:absolute;top:86px;left:50%;transform:translateX(-50%);background:#b32635;border:2px solid #ff8a8a;border-radius:12px;padding:8px 14px;font-weight:900;z-index:5;pointer-events:auto}
+#chat{display:flex;gap:6px;margin:10px 0}.chatline{background:#142833;border-radius:8px;padding:6px 8px;text-align:left;margin:4px 0;font-size:13px}.chatbox{max-height:150px;overflow:auto;text-align:left;background:#071017;border-radius:10px;padding:6px}
+.voteRow{display:flex;align-items:center;justify-content:space-between;gap:6px;background:#132630;border-radius:9px;padding:6px}.voteBar{height:8px;background:#263942;border-radius:8px;flex:1;overflow:hidden}.voteBar i{display:block;height:100%;width:0;background:#55c8ef;transition:width .7s}.result{font-size:26px;font-weight:1000;animation:pop .7s ease}@keyframes pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+.vent{fill:#111b20;stroke:#667983;stroke-width:3}.ventGlow{animation:pulse 1.2s infinite}@keyframes pulse{50%{opacity:.45}}
+#meeting .box{position:relative}
+</style></head><body>
+<canvas id="game"></canvas><div id="ui">
+<div class="top" id="locationName">Communications</div>
+<div class="card"><b id="status">タスク 0 / 5</b><div class="bar"><div id="fill" class="fill"></div></div><div class="small" id="role">役職：クルー</div></div>
+<div class="card right"><b>船内通信</b><div id="multiStatus" class="small">👥 マルチプレイ：未接続</div><div id="multiPanel" style="margin:5px 0"><button id="aiBtn">🤖 AIと遊ぶ</button><input id="roomCode" maxlength="6" placeholder="部屋コード" style="width:90px;padding:7px;border-radius:7px;border:1px solid #526a77;background:#08151c;color:#fff;text-transform:uppercase"><button id="hostBtn">部屋を作る</button><button id="joinBtn">参加</button></div><div class="small" id="log">探索を開始しました。</div><button class="danger" id="report">🚨 通報</button><button id="meetingBtn">📢 緊急会議</button><button id="ventBtn">🕳️ ベント</button><button id="killBtn" class="danger" style="display:none">⚠️ アクション</button></div>
+<div id="sabotage">⚠️ 緊急サボタージュ！ <span id="sabTime">20</span>秒</div>
+<div class="card bottom"><b>操作</b><div class="small">画面ドラッグ：移動<br>青い端末：タスク<br>死体の近く：通報</div></div>
+<div id="meeting"><div class="box"><h2>緊急会議</h2><p id="meetingText">誰が怪しい？</p><div id="chatlog" class="chatbox"></div><div id="chat"><input id="chatInput" maxlength="40" placeholder="会議チャット…"><button id="chatSend">送信</button></div><div id="votes" class="votes"></div><div id="voteResult" class="result"></div><button id="skip">投票をスキップ</button></div></div>
+<div id="end"><div class="box"><h2 id="endTitle"></h2><p id="endText"></p><button onclick="location.reload()">もう一度プレイ</button></div></div>
+</div>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+const c=document.getElementById('game'),x=c.getContext('2d');let W,H,d=1,drag=false,last={x:0,y:0},meeting=false,ended=false,killCooldown=0,aiTimer=0,sabotage=false,sabLeft=0,vented=false,chatMessages=[],ghost=false,activeTask=null,taskStage=0,doors=[],taskMiniOpen=false;
+let peer=null,hostConn=null,connections=[],isHost=false,multi=false,aiMode=false,remotePlayers={},myPlayerId='p'+Math.random().toString(36).slice(2,7),roomCode='';
+const player={x:0,y:0,color:'#36a9df',alive:true,role:'crew'};
+let playerImpostorKillCooldown=0;
+const tasks=[[-760,-320,'通信'],[-180,-360,'電力'],[520,-300,'酸素'],[-620,300,'エンジン'],[430,320,'航法']];
+let done=0;
+const npcs=[
+{id:1,name:'レッド',x:-170,y:-40,color:'#ef4b4b',role:'impostor',alive:true,target:null},
+{id:2,name:'イエロー',x:150,y:-20,color:'#f2c94c',role:'crew',alive:true,target:null},
+{id:3,name:'パープル',x:-40,y:110,color:'#a66cff',role:'crew',alive:true,target:null},
+{id:4,name:'グリーン',x:360,y:100,color:'#35c978',role:'crew',alive:true,target:null},
+{id:5,name:'オレンジ',x:-350,y:60,color:'#ff7c3e',role:'crew',alive:true,target:null},
+{id:6,name:'シアン',x:280,y:40,color:'#45d8d0',role:'impostor',alive:true,target:null}
+];
+let bodies=[];
+let ejections=[];
+let cam={x:0,y:0};
+const aiMemory={};
+function aiInit(q){if(!aiMemory[q.id])aiMemory[q.id]={lastRoom:null,suspect:0,seenImpostor:false,seenBodies:0,taskTarget:0,chatSeed:0};return aiMemory[q.id]}
+const rooms=[{n:'Communications',x:-800,y:-360,w:430,h:330},{n:'Electrical',x:-300,y:-390,w:500,h:330},{n:'Oxygen',x:270,y:-360,w:500,h:330},{n:'Engine',x:-800,y:30,w:520,h:430},{n:'Navigation',x:-150,y:30,w:500,h:430},{n:'Storage',x:390,y:30,w:380,h:430},{n:'Security',x:-1030,y:-500,w:260,h:240},{n:'Medical',x:700,y:-500,w:280,h:240},{n:'Cafeteria',x:-1030,y:270,w:260,h:250},{n:'Reactor',x:500,y:270,w:400,h:250}];
+const roomDoors=[
+ {x:-625,y:-58,w:70,h:28},  // Communications bottom wall: horizontal door
+ {x:-25,y:-88,w:70,h:28},   // Electrical bottom wall: horizontal door
+ {x:255,y:-275,w:28,h:70},  // Oxygen left wall: vertical door
+ {x:-705,y:22,w:70,h:28},   // Engine top wall: horizontal door
+ {x:-5,y:22,w:70,h:28},     // Navigation top wall: horizontal door
+ {x:378,y:180,w:28,h:70},    // Storage left wall: vertical door
+ {x:-930,y:-275,w:70,h:28}, // Security bottom
+ {x:795,y:-275,w:70,h:28},  // Medical bottom
+ {x:-930,y:248,w:70,h:28},  // Cafeteria top
+ {x:660,y:248,w:70,h:28}    // Reactor top
+];
+const roomProps=[
+ {type:'console',name:'Security Monitor',x:-970,y:-430,w:90,h:55,solid:true},
+ {type:'server',name:'Security Rack',x:-835,y:-430,w:55,h:105,solid:true},
+ {type:'crate',name:'Security Case',x:-940,y:-330,w:70,h:55,solid:true},
+ {type:'console',name:'Security Panel',x:-760,y:-335,w:70,h:45,solid:true},
+ {type:'server',name:'Security Battery',x:-865,y:-315,w:45,h:70,solid:true},
+ {type:'med',name:'Med Cabinet',x:770,y:-430,w:60,h:80,solid:true},
+ {type:'table',name:'Med Table',x:900,y:-330,w:120,h:48,solid:true},
+ {type:'crate',name:'Med Supply',x:735,y:-330,w:60,h:50,solid:true},
+ {type:'console',name:'Med Scanner',x:845,y:-455,w:75,h:48,solid:true},
+ {type:'tank',name:'Med Oxygen',x:965,y:-430,w:38,h:78,solid:true},
+ {type:'table',name:'Cafe Table',x:-970,y:350,w:105,h:45,solid:true},
+ {type:'table',name:'Cafe Table',x:-835,y:430,w:105,h:45,solid:true},
+ {type:'crate',name:'Cafe Crate',x:-970,y:465,w:65,h:50,solid:true},
+ {type:'table',name:'Cafe Table',x:-700,y:350,w:105,h:45,solid:true},
+ {type:'crate',name:'Food Box',x:-700,y:465,w:60,h:45,solid:true},
+ {type:'console',name:'Coffee Station',x:-880,y:315,w:75,h:48,solid:true},
+ {type:'engine',name:'Reactor Core',x:700,y:390,w:130,h:125,solid:true},
+ {type:'pipe',name:'Reactor Pipe',x:560,y:465,w:170,h:32,solid:true},
+ {type:'server',name:'Reactor Control',x:840,y:330,w:55,h:100,solid:true},
+ {type:'tank',name:'Coolant Tank',x:575,y:355,w:42,h:82,solid:true},
+ {type:'pipe',name:'Reactor Pipe',x:850,y:475,w:150,h:30,solid:true},
+ {type:'server',name:'Reactor Power',x:650,y:485,w:52,h:72,solid:true},
+ {type:'server',name:'Comms Rack',x:-700,y:-250,w:55,h:100,solid:true},
+ {type:'console',name:'Comms Desk',x:-560,y:-250,w:100,h:48,solid:true},
+ {type:'cable',name:'Comms Cable',x:-720,y:-130,w:90,h:35,solid:true},
+ {type:'server',name:'Electrical Rack',x:-280,y:-300,w:58,h:105,solid:true},
+ {type:'console',name:'Electrical Panel',x:-60,y:-300,w:85,h:50,solid:true},
+ {type:'cable',name:'Cable Coil',x:-250,y:-110,w:70,h:40,solid:true},
+ {type:'tank',name:'Spare Tank',x:300,y:-285,w:40,h:80,solid:true},
+ {type:'console',name:'Oxygen Control',x:650,y:-285,w:90,h:50,solid:true},
+ {type:'server',name:'Oxygen Pump',x:720,y:-150,w:55,h:85,solid:true},
+ {type:'engine',name:'Aux Engine',x:-730,y:160,w:105,h:95,solid:true},
+ {type:'pipe',name:'Engine Pipe',x:-520,y:250,w:150,h:30,solid:true},
+ {type:'console',name:'Engine Control',x:-690,y:390,w:85,h:48,solid:true},
+ {type:'crate',name:'Engine Parts',x:-500,y:120,w:65,h:55,solid:true},
+ {type:'console',name:'Nav Map',x:100,y:150,w:90,h:48,solid:true},
+ {type:'server',name:'Nav Computer',x:300,y:320,w:55,h:85,solid:true},
+ {type:'crate',name:'Nav Equipment',x:-80,y:390,w:65,h:55,solid:true},
+ {type:'table',name:'Nav Workbench',x:350,y:150,w:100,h:45,solid:true},
+ {type:'server',name:'Aux Server',x:-180,y:-250,w:50,h:90,solid:true},
+ {type:'cable',name:'Loose Cable',x:-90,y:-210,w:75,h:30,solid:true},
+ {type:'crate',name:'Spare Parts',x:-360,y:-180,w:60,h:52,solid:true},
+ {type:'console',name:'Power Readout',x:-210,y:-180,w:75,h:45,solid:true},
+ {type:'tank',name:'Emergency Tank',x:360,y:-170,w:38,h:76,solid:true},
+ {type:'crate',name:'Oxygen Supplies',x:590,y:-180,w:65,h:50,solid:true},
+ {type:'server',name:'Pump Controller',x:450,y:-110,w:50,h:82,solid:true},
+ {type:'table',name:'Tool Bench',x:-620,y:190,w:105,h:46,solid:true},
+ {type:'crate',name:'Tool Box',x:-720,y:300,w:60,h:48,solid:true},
+ {type:'console',name:'Engine Readout',x:-560,y:180,w:80,h:45,solid:true},
+ {type:'pipe',name:'Fuel Pipe',x:-350,y:300,w:140,h:30,solid:true},
+ {type:'crate',name:'Machine Parts',x:-280,y:410,w:65,h:50,solid:true},
+ {type:'server',name:'Nav Relay',x:60,y:280,w:50,h:85,solid:true},
+ {type:'cable',name:'Nav Cable',x:160,y:400,w:90,h:30,solid:true},
+ {type:'table',name:'Storage Bench',x:520,y:130,w:110,h:48,solid:true},
+ {type:'crate',name:'Storage Box',x:690,y:170,w:70,h:58,solid:true},
+ {type:'crate',name:'Storage Box',x:570,y:350,w:70,h:58,solid:true},
+ {type:'server',name:'Storage Terminal',x:470,y:410,w:52,h:82,solid:true},
+ {type:'med',name:'Med Drawer',x:720,y:-120,w:58,h:70,solid:true},
+ {type:'table',name:'Med Cart',x:880,y:-180,w:75,h:45,solid:true},
+ {type:'console',name:'Vitals Monitor',x:940,y:-100,w:70,h:45,solid:true},
+ {type:'crate',name:'Medical Box',x:820,y:-240,w:60,h:48,solid:true},
+ {type:'server',name:'Security Console',x:-930,y:-390,w:52,h:82,solid:true},
+ {type:'cable',name:'Security Cable',x:-760,y:-390,w:80,h:30,solid:true},
+ {type:'crate',name:'Evidence Case',x:-1010,y:-330,w:60,h:48,solid:true},
+ {type:'table',name:'Cafe Counter',x:-760,y:300,w:120,h:45,solid:true},
+ {type:'crate',name:'Drink Crate',x:-600,y:450,w:65,h:50,solid:true},
+ {type:'console',name:'Kitchen Panel',x:-920,y:420,w:75,h:45,solid:true},
+ {type:'tank',name:'Reactor Coolant',x:620,y:330,w:40,h:80,solid:true},
+ {type:'console',name:'Reactor Gauge',x:760,y:300,w:75,h:45,solid:true},
+ {type:'crate',name:'Reactor Parts',x:920,y:420,w:65,h:52,solid:true}
+];
 const props=[
  {type:'breaker',name:'Main Breaker',x:-150,y:-275,w:58,h:78,solid:true,task:1},
  {type:'server',name:'Server Rack',x:-650,y:-220,w:62,h:92,solid:true},
@@ -25,14 +155,25 @@ function bodyContact(a,b,extra=0){
 function bodyTouchesPoint(a,px,py,extra=0){
  return Math.hypot(a.x-px,a.y-py)<=22+extra;
 }
+const taskCorridors=[
+ {a:{x:0,y:0},b:{x:-760,y:-320},r:78},
+ {a:{x:-760,y:-320},b:{x:-180,y:-360},r:72},
+ {a:{x:-180,y:-360},b:{x:520,y:-300},r:76},
+ {a:{x:0,y:0},b:{x:-620,y:300},r:74},
+ {a:{x:0,y:0},b:{x:430,y:320},r:74}
+];
+function pointNearTaskRoute(px,py,pad=0){
+ return taskCorridors.some(s=>{
+  const dx=s.b.x-s.a.x,dy=s.b.y-s.a.y,len=dx*dx+dy*dy||1;
+  const t=Math.max(0,Math.min(1,((px-s.a.x)*dx+(py-s.a.y)*dy)/len));
+  return Math.hypot(px-(s.a.x+t*dx),py-(s.a.y+t*dy))<=s.r+pad;
+ });
+}
 function propHit(px,py,r=22){
  if(pointNearTaskRoute(px,py,18))return false;
  const equipment=[...props,...roomProps];
  return equipment.some(p=>{
-  if(!p.solid)return false;
-  // Mission paths stay clear: objects overlapping a route are non-blocking there.
-  const routeBlocked=pointNearTaskRoute(p.x,p.y,p.w/2+28);
-  if(routeBlocked)return false;
+  if(!p.solid||pointNearTaskRoute(p.x,p.y,p.w/2+28))return false;
   return bodyRectContact(px,py,p.x-p.w/2,{w:p.w,h:p.h},r);
  });
 }
@@ -177,30 +318,20 @@ function person(q,label=true){
 }
 function drawIndustrialDetails(){
  x.save();
- // Raised cable trays follow walls, not mission paths.
  rooms.forEach(r=>{
   const px=sx(r.x+28),py=sy(r.y+27),rw=r.w-56;
   x.fillStyle='#0c171d';x.fillRect(px,py,rw,8);
   x.fillStyle='#5a727c';x.fillRect(px,py,rw,2);
   x.fillStyle='#243b45';x.fillRect(px,py+6,rw,2);
-  for(let i=18;i<rw;i+=42){
-   x.fillStyle='#9aaeb5';x.fillRect(px+i,py-2,3,12);
-  }
-  // Floor drains and segmented maintenance strips along room edges.
-  x.fillStyle='#101c22';
-  x.fillRect(sx(r.x+20),sy(r.y+r.h-36),r.w-40,10);
+  for(let i=18;i<rw;i+=42){x.fillStyle='#9aaeb5';x.fillRect(px+i,py-2,3,12)}
+  x.fillStyle='#101c22';x.fillRect(sx(r.x+20),sy(r.y+r.h-36),r.w-40,10);
   x.strokeStyle='#3b5661';x.lineWidth=1;
-  for(let gx=r.x+26;gx<r.x+r.w-25;gx+=18){
-   x.beginPath();x.moveTo(sx(gx),sy(r.y+r.h-35));x.lineTo(sx(gx),sy(r.y+r.h-27));x.stroke();
-  }
+  for(let gx=r.x+26;gx<r.x+r.w-25;gx+=18){x.beginPath();x.moveTo(sx(gx),sy(r.y+r.h-35));x.lineTo(sx(gx),sy(r.y+r.h-27));x.stroke()}
  });
- // Small warning chevrons beside doors only.
  roomDoors.forEach(g=>{
   const px=sx(g.x+g.w/2),py=sy(g.y+g.h/2);
   x.fillStyle='#e7b84d';x.globalAlpha=.8;
-  for(let i=-1;i<=1;i++){
-   x.beginPath();x.moveTo(px+i*9-3,py-3);x.lineTo(px+i*9+3,py);x.lineTo(px+i*9-3,py+3);x.closePath();x.fill();
-  }
+  for(let i=-1;i<=1;i++){x.beginPath();x.moveTo(px+i*9-3,py-3);x.lineTo(px+i*9+3,py);x.lineTo(px+i*9-3,py+3);x.closePath();x.fill()}
   x.globalAlpha=1;
  });
  x.restore();
@@ -366,7 +497,6 @@ function renderChat(){const el=document.getElementById('chatlog');el.innerHTML=c
 let meetingVotes={};
 let meetingResolving=false;
 let aiMeetingCooldown=0;
-let meetingVoteTimer=null;
 
 function aiChooseVote(q){
  const candidates=npcs.filter(z=>z.alive&&z.id!==q.id&&z.role!=='impostor');
@@ -393,36 +523,21 @@ function aiChooseVote(q){
 function openMeeting(reason='会議が始まりました。'){
  if(ended)return;
  meeting=true;meetingResolving=false;meetingVotes={};
- if(meetingVoteTimer){clearTimeout(meetingVoteTimer);meetingVoteTimer=null;}
  document.getElementById('meetingText').textContent=reason;
  document.getElementById('meeting').style.display='flex';
- document.getElementById('voteResult').style.display='none';
  renderChat();
  const v=document.getElementById('votes');v.innerHTML='';
  const people=[...npcs.filter(q=>q.alive),...(player.alive?[{id:0,name:'YOU',color:player.color,role:player.role,alive:true}]:[])];
  people.forEach(q=>{
-  const b=document.createElement('button');
-  b.textContent=q.name;
-  b.onclick=()=>vote(q.id);
-  v.appendChild(b);
+  let b=document.createElement('button');b.textContent=q.name;
+  b.onclick=()=>vote(q.id);v.appendChild(b)
  });
- const castAIVotes=()=>{
+ // AIは会議開始直後から、それぞれ独立して考えて投票
+ if(aiMode)setTimeout(()=>{
   if(!meeting||ended)return;
-  npcs.filter(q=>q.alive).forEach(q=>{
-   if(meetingVotes[q.id]===undefined)meetingVotes[q.id]=aiChooseVote(q);
-  });
+  npcs.filter(q=>q.alive).forEach(q=>{meetingVotes[q.id]=aiChooseVote(q)});
   renderChat();
-  if(allMeetingVotesCast())resolveMeeting();
- };
- // AIは必ず全員が1票入れる
- if(aiMode)setTimeout(()=>{castAIVotes();aiMeeting();},500);
- // プレイヤーが押さなくても、時間切れならスキップ票を入れて全員分を揃える
- meetingVoteTimer=setTimeout(()=>{
-  if(!meeting||ended)return;
-  castAIVotes();
-  if(player.alive&&meetingVotes[0]===undefined)meetingVotes[0]='skip';
-  if(allMeetingVotesCast())resolveMeeting();
- },3500);
+ },500);
 }
 
 function resolveMeeting(){
@@ -431,16 +546,11 @@ function resolveMeeting(){
  Object.values(meetingVotes).forEach(id=>{counts[id]=(counts[id]||0)+1});
  let winner='skip',max=0,tie=false;
  Object.entries(counts).forEach(([id,n])=>{
-  if(id==='skip')return;
   if(n>max){winner=id;max=n;tie=false}
   else if(n===max&&n>0){tie=true}
  });
- const totalVoters=Object.keys(meetingVotes).length;
- const required=Math.max(2,Math.floor(totalVoters/2)+1);
- // 1票だけでは絶対に追放しない。過半数＋最低2票が必要。
- if(tie||max<required)winner='skip';
+ if(tie)winner='skip';
  meetingResolving=true;
- if(meetingVoteTimer){clearTimeout(meetingVoteTimer);meetingVoteTimer=null;}
  const target=winner==='skip'?null:npcs.find(q=>String(q.id)===String(winner))||(String(winner)==='0'?player:null);
  const box=document.getElementById('voteResult');
  box.textContent=target?'🗳️ '+target.name+' に '+max+'票！':'🗳️ 投票はスキップ／同数票！';
@@ -457,19 +567,13 @@ function resolveMeeting(){
  },1200);
 }
 
-function allMeetingVotesCast(){
- const need=npcs.filter(q=>q.alive).length+(player.alive?1:0);
- return Object.keys(meetingVotes).length>=need;
-}
-
 function vote(id){
  if(!meeting||meetingResolving)return;
  meetingVotes[0]=id;
- const buttons=[...document.querySelectorAll('#votes button')];
- buttons.forEach(b=>{b.disabled=true;b.style.transform='scale(.96)'});
- document.getElementById('voteResult').textContent='🗳️ AIも投票済み。票を集計中…';
+ const buttons=[...document.querySelectorAll('#votes button')];buttons.forEach(b=>{b.disabled=true;b.style.transform='scale(.96)'});
+ document.getElementById('voteResult').textContent='🗳️ AIも投票を考えています…';
  document.getElementById('voteResult').style.display='block';
- if(allMeetingVotesCast())setTimeout(resolveMeeting,450);
+ setTimeout(resolveMeeting,900);
 }
 
 function aiCanCallMeeting(){
@@ -491,552 +595,7 @@ function aiMaybeCallMeeting(){
 document.getElementById('report').onclick=()=>{if(closestBody())openMeeting('死体が通報されました。');else setLog('近くに通報できる死体がありません。')};
 document.getElementById('meetingBtn').onclick=()=>openMeeting('緊急会議が招集されました。');
 setInterval(()=>{if(aiMeetingCooldown>0)aiMeetingCooldown--;if(!ended&&aiMode)aiMaybeCallMeeting();if(!ended&&Math.random()<.18)closeDoors()},7000);
-document.getElementById('skip').onclick=()=>vote('skip');
-document.getElementById('chatSend').onclick=()=>{const input=document.getElementById('chatInput');if(input.value.trim()){chatMessages.push({n:'YOU',t:input.value.trim()});input.value='';renderChat();setTimeout(()=>{if(meeting){const alive=npcs.filter(q=>q.alive);const q=alive[Math.floor(Math.random()*alive.length)];if(q){chatMessages.push({n:q.name,t:['私は怪しいと思う人がいる。','さっき通信室にいたよ。','誰かベントを見た？','証拠を確認しよう。'][Math.floor(Math.random()*4)]});renderChat()}}},500)}};
-document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('chatSend').click()});
-function sabotageNow(){if(sabotage||ended)return;sabotage=true;sabLeft=20;document.getElementById('sabotage').style.display='block';setLog('インポスターがサボタージュを発生させた！');}
-function repairSabotage(){if(!sabotage)return;sabotage=false;sabLeft=0;document.getElementById('sabotage').style.display='none';setLog('サボタージュを解除した！');}
-function useVent(){if(ended||meeting)return;let near=vents.find(v=>bodyTouchesPoint(player,v[0],v[1],8));if(near){vented=!vented;setLog(vented?'ベントに隠れた。':'ベントから出た。');}else setLog('近くにベントがありません。');}
-document.getElementById('ventBtn').onclick=useVent;
-document.getElementById('sabotage').onclick=repairSabotage;
-function sameActionSpace(a,b){
- const ra=roomOf(a),rb=roomOf(b);
- return ra===rb;
-}
-function playerImpostorAction(){
- if(player.role!=='インポスター'||!player.alive||meeting||ended||playerImpostorKillCooldown>0)return;
- const target=npcs.find(z=>z.alive&&z.role==='crew'&&sameActionSpace(z,player)&&bodyContact(z,player));
- if(target){kill(target);playerImpostorKillCooldown=180;setLog(target.name+'が倒れた。');checkWin();}else{setLog('近くにターゲットがいません。');}
-}
-document.getElementById('killBtn').onclick=playerImpostorAction;
-function impostorAttack(q){
- if(killCooldown>0)return;
- const target=npcs.find(z=>z.alive&&z.role==='crew'&&sameActionSpace(z,q)&&bodyContact(z,q));
- if(target){kill(target);killCooldown=180;setLog(q.name+'のキルクールダウン開始');}
-}
-function moveAI(){
- for(const q of npcs){if(!q.alive)continue;const mem=aiInit(q);mem.lastRoom=roomOf(q);
-
-  if(q.role==='impostor'){
-   if(Math.random()<0.002)sabotageNow();
-   let target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-q.x,z.y-q.y)<260);
-   if(target){let dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;const nx=q.x+dx/L*.52,ny=q.y+dy/L*.65;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny};
-    if(Math.hypot(q.x-target.x,q.y-target.y)<34){impostorAttack(q);q.x-=8;}
-   }else{const nx=q.x+Math.sin(Date.now()/900+q.id)*.35,ny=q.y+Math.cos(Date.now()/1000+q.id)*.35;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}}
-  }else{
-   let targetTask=tasks[Math.min((done+q.id)%tasks.length,tasks.length-1)];
-   let t=targetTask;let dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;const nx=q.x+dx/L*.65,ny=q.y+dy/L*.65;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}
-  }
- }
-}
-function taskGame(){
- if(!activeTask||meeting||ended)return;
- const ok=Math.random()<.8;if(ok)taskStage++;else setLog('ミス！もう一度操作しよう');
- setLog(activeTask[2]+'：ミニゲーム '+taskStage+'/3');
- if(taskStage>=3){activeTask=null;const completedIndex=done;done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog('タスク完了！');if(isHost)broadcastState();else if(hostConn&&hostConn.open)hostConn.send({type:'task',index:completedIndex});checkWin()}
-}
-c.addEventListener('click',e=>{if(activeTask&&!meeting&&!ended)taskGame()});
-function closeDoors(){doors=[[-590,-52,70,28],[-10,-82,70,28],[270,-270,28,70],[-670,28,70,28],[20,28,70,28],[390,190,28,70],[-930,-275,70,28],[795,-275,70,28],[-930,248,70,28],[660,248,70,28]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
-function update(){
- updateEjections();
- updateLocationName();
- if(player.role==='インポスター'){const el=document.getElementById('role');if(el)el.style.color='#ff6b6b';}
- if(!ended&&!meeting&&(player.alive||ghost)){
-  if(sabotage){if(aiTimer%60===0){sabLeft--;document.getElementById('sabTime').textContent=sabLeft}if(sabLeft<=0){end('IMPOSTOR WIN!','サボタージュを止められなかった！');return}}
-  if(sabotage&&tasks.some(t=>bodyTouchesPoint(player,t[0],t[1],6)))repairSabotage();
-  if(ghost){setLog('👻 ゴーストモード：自由に船内を探索中');}
-  if(aiTimer++%15===0&&(isHost||!multi||aiMode))moveAI();
-  if(killCooldown>0)killCooldown--;if(playerImpostorKillCooldown>0)playerImpostorKillCooldown--;
-  if(killCooldown===0&&npcs.some(q=>q.role==='impostor'&&q.alive))document.getElementById('log').dataset.ready='1';
-  if(player.role!=='インポスター'&&done<tasks.length&&!activeTask){
- const taskProp=props.find(p=>p.task===done&&bodyRectContact(player.x,player.y,p.x-p.w/2,{w:p.w,h:p.h},22));
- const taskNearTerminal=bodyTouchesPoint(player,tasks[done][0],tasks[done][1],8);
- if(taskProp||taskNearTerminal){
-  activeTask=tasks[done];taskStage=0;document.getElementById('status').textContent='タスク中：'+activeTask[2];setLog(activeTask[2]+'のミニゲーム開始！');
- }
-}
-if(activeTask&&taskStage>=3){done++;activeTask=null;taskStage=0;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog(tasks[done-1][2]+'タスク完了！');checkWin()}
-  let imp=npcs.find(q=>q.role==='impostor'&&q.alive);if(player.role!=='インポスター'&&!ghost&&!vented&&imp&&bodyContact(imp,player)&&killCooldown===0){bodies.push({x:player.x,y:player.y,color:player.color,name:'YOU'});player.alive=false;ghost=true;setLog('👻 ゴーストになった！ 死体が残った。');}
- }
- if(isHost&&aiTimer%6===0)broadcastState();draw();requestAnimationFrame(update)
-}
-c.addEventListener('pointerdown',e=>{if(ended||meeting)return;drag=true;last={x:e.clientX,y:e.clientY}});
-c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;const nx=Math.max(-1080,Math.min(980,player.x+dx*.52)),ny=Math.max(-580,Math.min(580,player.y+dy*.52));if(canMoveTo(player.x,player.y,nx,ny)){player.x=nx;player.y=ny}cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
-c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
-updateRoleUI();
-update();
-</script></body></html>
-const taskCorridors=[
- {a:{x:0,y:0},b:{x:-760,y:-320},r:78},
- {a:{x:-760,y:-320},b:{x:-180,y:-360},r:72},
- {a:{x:-180,y:-360},b:{x:520,y:-300},r:76},
- {a:{x:0,y:0},b:{x:-620,y:300},r:74},
- {a:{x:0,y:0},b:{x:430,y:320},r:74}
-];
-function pointNearTaskRoute(px,py,pad=0){
- return taskCorridors.some(route=>{
-  const ax=route.a.x,ay=route.a.y,bx=route.b.x,by=route.b.y;
-  const vx=bx-ax,vy=by-ay,den=vx*vx+vy*vy||1;
-  const t=Math.max(0,Math.min(1,((px-ax)*vx+(py-ay)*vy)/den));
-  return Math.hypot(px-(ax+t*vx),py-(ay+t*vy))<route.r+pad;
- });
-}
-
-const props=[
- {type:'breaker',name:'Main Breaker',x:-150,y:-275,w:58,h:78,solid:true,task:1},
- {type:'server',name:'Server Rack',x:-650,y:-220,w:62,h:92,solid:true},
- {type:'cable',name:'Cable Panel',x:-455,y:-215,w:70,h:38,solid:true},
- {type:'tank',name:'Oxygen Tank',x:430,y:-250,w:42,h:88,solid:true},
- {type:'tank',name:'Oxygen Tank',x:570,y:-190,w:42,h:88,solid:true},
- {type:'engine',name:'Engine Core',x:-610,y:155,w:120,h:110,solid:true},
- {type:'pipe',name:'Coolant Pipe',x:-430,y:335,w:150,h:34,solid:true},
- {type:'console',name:'Navigation Console',x:180,y:150,w:92,h:58,solid:true,task:4},
- {type:'crate',name:'Cargo Crate',x:500,y:180,w:86,h:70,solid:true},
- {type:'crate',name:'Cargo Crate',x:650,y:180,w:86,h:70,solid:true},
- {type:'table',name:'Work Table',x:-70,y:205,w:110,h:52,solid:true},
- {type:'med',name:'Medical Cabinet',x:650,y:90,w:58,h:78,solid:true},
- {type:'comms',name:'Comms Array',x:-680,y:-70,w:100,h:58,solid:true,task:0}
-];
-function propRect(p){return {x:p.x-p.w/2,y:p.y-p.h/2,w:p.w,h:p.h}}
-function bodyRectContact(px,py,rx,ry,r=22){
- const nx=Math.max(rx,Math.min(px,rx+ry.w)),ny=Math.max(ry,Math.min(py,ry+ry.h));
- return Math.hypot(px-nx,py-ny)<=r;
-}
-function bodyContact(a,b,extra=0){
- return Math.hypot(a.x-b.x,a.y-b.y)<=44+extra;
-}
-function bodyTouchesPoint(a,px,py,extra=0){
- return Math.hypot(a.x-px,a.y-py)<=22+extra;
-}
-function propHit(px,py,r=22){
- const equipment=[...props,...roomProps];
- return equipment.some(p=>p.solid&&bodyRectContact(px,py,p.x-p.w/2,{w:p.w,h:p.h},r));
-}
-function canMoveAroundProps(fromX,fromY,toX,toY){
- const steps=6;
- for(let i=0;i<=steps;i++){
-  const t=i/steps,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
-  if(propHit(px,py,13))return false;
- }
- return true;
-}
-function nearRoomDoor(px,py){return roomDoors.some(d=>px>=d.x-12&&px<=d.x+d.w+12&&py>=d.y-12&&py<=d.y+d.h+12)}
-function closedDoorHit(px,py,r=22){
- return doors.some(d=>{
-  const [dx,dy,dw,dh]=d;
-  return px+r>dx&&px-r<dx+dw&&py+r>dy&&py-r<dy+dh;
- });
-}
-function closedDoorPathHit(fromX,fromY,toX,toY){
- const steps=10;
- for(let i=0;i<=steps;i++){
-  const t=i/steps,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
-  if(closedDoorHit(px,py,22))return true;
- }
- return false;
-}
-function roomAt(px,py){return rooms.find(r=>px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h)||null}
-function pointInsideRoom(px,py,r){return px>r.x+8&&px<r.x+r.w-8&&py>r.y+8&&py<r.y+r.h-8}
-function canMoveTo(fromX,fromY,toX,toY){
- const from=roomAt(fromX,fromY),to=roomAt(toX,toY);
- if(closedDoorPathHit(fromX,fromY,toX,toY))return false;
- if(!canMoveAroundProps(fromX,fromY,toX,toY))return false;
- if(from===to)return true;
- if(nearRoomDoor(fromX,fromY)||nearRoomDoor(toX,toY))return true;
- const steps=8;
- for(let i=1;i<=steps;i++){
-   const t=i/steps,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
-   if(nearRoomDoor(px,py))return true;
- }
- return false;
-}
-function roomOf(q){const r=rooms.find(r=>q.x>=r.x&&q.x<=r.x+r.w&&q.y>=r.y&&q.y<=r.y+r.h);return r?r.n:'Corridor'}
-function updateLocationName(){const el=document.getElementById('locationName');if(el)el.textContent=roomOf(player)}
-function nearestCrew(q){return npcs.filter(z=>z.alive&&z.role==='crew').sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
-function nearestBodyTo(q){return bodies.slice().sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
-function aiChat(q){const m=aiInit(q);const lines=q.role==='impostor'?['今の動き、少し気になる。','自分はタスクをしていたよ。','死体の場所を確認しよう。','誰か怪しい動きを見た？']:['私は今のところ普通にタスク中。','さっき '+roomOf(q)+' にいたよ。','死体を見つけたら報告しよう。','誰かの行動を見ていた人いる？'];chatMessages.push({n:q.name,t:lines[m.chatSeed++%lines.length]});renderChat()}
-function aiChooseVote(q){
- const candidates=npcs.filter(z=>z.alive&&z.id!==q.id);
- if(player.alive&&player.id!==q.id)candidates.push({id:0,name:'YOU',x:player.x,y:player.y,role:player.role,alive:true});
- if(!candidates.length)return 'skip';
- let best='skip',bestScore=-999;
- candidates.forEach(z=>{
-  let score=Math.random()*3;
-  const d=Math.hypot(z.x-q.x,z.y-q.y);
-  score+=(260-Math.min(d,260))/130;
-  if(roomOf(z)===roomOf(q))score+=1.5;
-  const body=nearestBodyTo(q);
-  if(body&&z.name===body.name)score+=5;
-  if(z.role==='インポスター'||z.role==='impostor')score-=8;
-  if(z.id===0&&player.role!=='インポスター')score+=Math.random()*2;
-  if(score>bestScore){bestScore=score;best=z.id}
- });
- return best;
-}
-function aiMeeting(){
- if(!aiMode||ended||!meeting)return;
- const alive=npcs.filter(q=>q.alive);
- alive.forEach(q=>{
-  const m=aiInit(q);m.chatSeed++;
-  if(Math.random()<.75)aiChat(q);
-  meetingVotes[q.id]=aiChooseVote(q);
- });
- renderChat();
-}
-
-function multiLog(t){const e=document.getElementById('multiStatus');if(e)e.textContent=t}
-function makeCode(){return Math.random().toString(36).slice(2,8).toUpperCase()}
-function connectPlayer(conn){
- conn.on('open',()=>{connections.push(conn);multi=true;multiLog('👥 接続中：'+connections.length+'人');conn.send({type:'welcome',id:myPlayerId,player:{x:player.x,y:player.y,color:player.color,name:'PLAYER'}});broadcastState()});
- conn.on('data',handleNet);conn.on('close',()=>{connections=connections.filter(c=>c!==conn);multiLog('👥 接続中：'+connections.length+'人')});
-}
-function broadcast(msg){connections=connections.filter(c=>c&&c.open);connections.forEach(c=>c.send(msg))}
-function broadcastState(){if(!isHost)return;const allPlayers={...remotePlayers,[myPlayerId]:{id:myPlayerId,x:player.x,y:player.y,color:player.color,name:'HOST',alive:player.alive}};broadcast({type:'state',players:allPlayers,done,bodies:bodies.map(b=>({x:b.x,y:b.y,color:b.color,name:b.name})),sabotage,doors})}
-function handleNet(m){
- if(m.type==='welcome'&&!isHost){multi=true;multiLog('👥 ホストに接続しました');return}
- if(m.type==='player'&&isHost){remotePlayers[m.id]={x:m.x,y:m.y,color:m.color,name:m.name||'PLAYER',alive:m.alive!==false};return}
- if(m.type==='task'&&isHost){if(m.index===done){done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';checkWin();broadcastState()}return}
- if(m.type==='state'&&!isHost){remotePlayers=m.players||{};done=m.done||0;bodies=m.bodies||[];sabotage=!!m.sabotage;doors=m.doors||[];document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';return}
-}
-function startHost(){
- if(peer)return;roomCode=makeCode();document.getElementById('roomCode').value=roomCode;isHost=true;multi=true;peer=new Peer(roomCode);multiLog('👥 部屋コード：'+roomCode+'（友だちに入力してもらう）');
- peer.on('open',id=>{multiLog('👥 部屋コード：'+id+'　参加者を待機中')});peer.on('connection',connectPlayer);peer.on('error',e=>multiLog('接続エラー：'+e.type));
-}
-function joinRoom(){
- if(peer)return;roomCode=document.getElementById('roomCode').value.trim().toUpperCase();if(roomCode.length<4){multiLog('⚠️ 部屋コードを入力');return}peer=new Peer();peer.on('open',()=>{hostConn=peer.connect(roomCode,{reliable:true});connectPlayer(hostConn)});peer.on('error',e=>multiLog('⚠️ 接続できません：'+e.type));
-}
-
-function startAI(){if(ended)return;aiMode=true;multi=false;assignRoles();document.getElementById('multiStatus').textContent='🤖 AI対戦中：AI 5人';setLog('AIクルーとAIインポスターが参加しました！');for(let i=0;i<npcs.length;i++){npcs[i].x=[-170,150,-40,360,-350,280][i];npcs[i].y=[-40,-20,110,100,60,40][i]}}
-document.getElementById('aiBtn').onclick=startAI;document.getElementById('hostBtn').onclick=startHost;document.getElementById('joinBtn').onclick=joinRoom;
-function sendLocal(){if(!multi)return;const msg={type:'player',id:myPlayerId,x:player.x,y:player.y,color:player.color,alive:player.alive,name:'PLAYER'};if(isHost){remotePlayers[myPlayerId]=msg;broadcastState()}else if(hostConn&&hostConn.open)hostConn.send(msg)}
-setInterval(sendLocal,100);
-const vents=[[-390,-120],[-40,-120],[330,-120],[-300,120],[120,120],[390,170]];
-const sabotageTargets=[['通信',-380,-190],['電力',-80,-220],['酸素',300,-140]];
-const roles=[['クルー','タスクを完了する'],['技術員','ベントを短時間だけ使用できる'],['監視員','会議で追加情報を得る'],['インポスター','クルーを減らし妨害する']];
-function assignRoles(){
- const playerIsImp=Math.random()<2/7;
- player.role=playerIsImp?'インポスター':'技術員';
- npcs.forEach(q=>q.role='crew');
- // インポスターは必ず合計1人。プレイヤーがインポスターならNPCは全員クルー。
- if(!playerIsImp){
-  const pool=[...npcs].sort(()=>Math.random()-.5);
-  pool[0].role='impostor';
- }
- updateRoleUI();
-}
-function updateRoleUI(){
- const el=document.getElementById('role');
- const kb=document.getElementById('killBtn');
- if(kb)kb.style.display=player.role==='インポスター'?'inline-block':'none';
- if(el)el.textContent='役職：'+player.role+' — '+(roles.find(r=>r[0]===player.role)||['インポスター','クルーを減らし妨害する'])[1];
-}
-assignRoles();
-function resize(){d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*d;c.height=H*d;x.setTransform(d,0,0,d,0,0)}addEventListener('resize',resize);resize();
-function sx(a){return a-cam.x+W/2}function sy(a){return a-cam.y+H/2}function rr(px,py,w,h,r,f){x.fillStyle=f;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
-function drawBody(q){
- const px=sx(q.x),py=sy(q.y);x.save();x.translate(px,py);
- x.fillStyle=q.color;x.beginPath();x.moveTo(-22,15);x.lineTo(-18,5);x.lineTo(-12,10);x.lineTo(-15,15);x.quadraticCurveTo(-7,24,0,24);x.quadraticCurveTo(7,24,15,15);x.lineTo(12,10);x.lineTo(18,5);x.lineTo(22,15);x.quadraticCurveTo(10,25,0,24);x.quadraticCurveTo(-10,25,-22,15);x.fill();
- x.fillStyle='#27343a';x.fillRect(-15,12,11,14);x.fillRect(4,12,11,14);
- x.strokeStyle='#f4f1dc';x.lineWidth=2.5;x.beginPath();x.moveTo(-13,-7);x.lineTo(-13,9);x.moveTo(-7,-10);x.lineTo(-7,8);x.moveTo(0,-12);x.lineTo(0,10);x.moveTo(7,-10);x.lineTo(7,8);x.moveTo(13,-7);x.lineTo(13,9);x.stroke();
- x.beginPath();x.moveTo(-15,-7);x.quadraticCurveTo(0,4,15,-7);x.moveTo(-15,0);x.quadraticCurveTo(0,10,15,0);x.stroke();
- x.fillStyle='#f4f1dc';x.beginPath();x.ellipse(0,-18,10,9,0,0,7);x.fill();x.fillStyle='#27343a';x.fillRect(-5,-20,3,3);x.fillRect(2,-20,3,3);
- x.restore();
-}
-function person(q,label=true){
- const px=sx(q.x),py=sy(q.y);x.save();x.translate(px,py);
- x.fillStyle='#111c22';x.beginPath();x.ellipse(0,25,27,10,0,0,7);x.fill();
- x.fillStyle=q.color;x.beginPath();x.moveTo(-22,15);x.lineTo(-18,-17);x.quadraticCurveTo(-15,-38,0,-42);x.quadraticCurveTo(15,-38,18,-17);x.lineTo(22,15);x.quadraticCurveTo(10,25,0,24);x.quadraticCurveTo(-10,25,-22,15);x.fill();
- x.fillStyle='#07151d';x.beginPath();x.ellipse(0,-29,16,12,0,0,7);x.fill();x.fillStyle='#31596a';x.beginPath();x.ellipse(-3,-32,11,5,0,0,7);x.fill();
- x.globalAlpha=.3;x.fillStyle='#d5f6ff';x.beginPath();x.ellipse(-6,-35,6,2,0,0,7);x.fill();x.globalAlpha=1;
- x.fillStyle='#26343b';x.fillRect(-28,-8,7,25);x.fillRect(21,-8,7,25);x.fillRect(-15,12,11,14);x.fillRect(4,12,11,14);x.restore();
- if(label){x.fillStyle='#fff';x.font='bold 12px system-ui';x.textAlign='center';x.fillText(q.name||'YOU',px,py+48)}
-}
-function drawRoomClutter(){
- roomProps.forEach(p=>drawProp(p));
- // 配管・ケーブル・床のボルトで各部屋を不規則に見せる
- const clutter=[
-  [-740,-470,-650,-470],[-560,-470,-470,-450],[-250,-330,-160,-330],
-  [350,-330,450,-330],[520,-310,620,-310],[-760,400,-680,400],
-  [-500,420,-410,420],[240,420,330,420],[420,450,500,450]
- ];
- x.save();x.lineCap='round';
- clutter.forEach((c,i)=>{
-  x.strokeStyle=i%2?'#8b6d45':'#536f7b';x.lineWidth=7;
-  x.beginPath();x.moveTo(sx(c[0]),sy(c[1]));x.bezierCurveTo(sx(c[0]+20),sy(c[1]-18),sx(c[2]-20),sy(c[3]+18),sx(c[2]),sy(c[3]));x.stroke();
-  x.strokeStyle='#18282f';x.lineWidth=2;x.stroke();
- });
- x.fillStyle='#8799a0';
- [[-730,-410],[-450,-410],[-210,-300],[360,-300],[590,-210],[-720,370],[-450,470],[300,470],[600,350]].forEach(p=>{
-  x.beginPath();x.arc(sx(p[0]),sy(p[1]),3,0,Math.PI*2);x.fill();
- });
- x.restore();
-}
-function drawProp(p){
- const px=sx(p.x),py=sy(p.y);x.save();x.translate(px,py);
- const glow=p.task!==undefined&&done<=p.task;
- if(glow){x.shadowColor='#48d8ff';x.shadowBlur=12}
- x.fillStyle='#101b21';x.fillRect(-p.w/2+5,-p.h/2+7,p.w,p.h);
- x.strokeStyle='#566d78';x.lineWidth=2;x.strokeRect(-p.w/2,-p.h/2,p.w,p.h);
- if(p.type==='breaker'){
-  const g=x.createLinearGradient(-p.w/2,-p.h/2,p.w/2,p.h/2);g.addColorStop(0,'#687985');g.addColorStop(.5,'#293942');g.addColorStop(1,'#101b21');x.fillStyle=g;x.fillRect(-p.w/2,-p.h/2,p.w,p.h);
-  x.fillStyle='#18242a';x.fillRect(-18,-28,36,56);
-  x.fillStyle='#a8bac2';x.fillRect(-12,-20,24,7);x.fillRect(-12,-5,24,7);
-  x.fillStyle=done>1?'#49e28b':'#e7b34c';x.fillRect(-8,8,16,13);
-  x.strokeStyle='#d4e5ea';x.lineWidth=3;x.beginPath();x.moveTo(-4,9);x.lineTo(6,2);x.stroke();
- }else if(p.type==='server'){
-  x.fillStyle='#25353d';x.fillRect(-p.w/2,-p.h/2,p.w,p.h);
-  for(let i=-28;i<=28;i+=18){x.fillStyle='#17252b';x.fillRect(-24,i,48,12);x.fillStyle='#55d8ef';x.fillRect(-18,i+4,5,3);x.fillStyle='#4ee08b';x.fillRect(-8,i+4,5,3)}
- }else if(p.type==='cable'){
-  x.fillStyle='#334951';x.fillRect(-p.w/2,-p.h/2,p.w,p.h);x.strokeStyle='#e2b44f';x.lineWidth=4;x.beginPath();x.moveTo(-25,-5);x.bezierCurveTo(-8,20,8,-20,25,5);x.stroke();x.fillStyle='#9eb2bb';x.fillRect(-28,-12,8,24);x.fillRect(20,-12,8,24);
- }else if(p.type==='tank'){
-  x.fillStyle='#70818a';x.beginPath();x.roundRect(-15,-p.h/2,30,p.h,13);x.fill();x.fillStyle='#31515d';x.fillRect(-12,-18,24,9);x.fillStyle='#65d7e8';x.fillRect(-8,-12,16,4);
- }else if(p.type==='engine'){
-  x.fillStyle='#3b4d55';x.fillRect(-p.w/2,-p.h/2,p.w,p.h);x.strokeStyle='#7b929b';x.lineWidth=3;x.strokeRect(-42,-35,84,70);x.fillStyle='#d06a35';x.beginPath();x.arc(0,0,25,0,7);x.fill();x.fillStyle='#f1bd59';x.beginPath();x.arc(0,0,13,0,7);x.fill();
- }else if(p.type==='pipe'){
-  x.strokeStyle='#738890';x.lineWidth=13;x.beginPath();x.moveTo(-p.w/2,0);x.lineTo(p.w/2,0);x.stroke();x.strokeStyle='#b6c7cc';x.lineWidth=4;x.stroke();
- }else if(p.type==='console'){
-  x.fillStyle='#334951';x.fillRect(-46,-20,92,40);x.fillStyle='#16323d';x.fillRect(-32,-14,50,22);x.fillStyle='#55d8ef';x.fillRect(-26,-8,28,4);x.fillStyle='#849aa3';x.fillRect(18,-8,8,16);
- }else if(p.type==='crate'){
-  x.fillStyle='#6d5842';x.fillRect(-p.w/2,-p.h/2,p.w,p.h);x.strokeStyle='#b28b60';x.lineWidth=3;x.strokeRect(-p.w/2,-p.h/2,p.w,p.h);x.beginPath();x.moveTo(-p.w/2,-p.h/2);x.lineTo(p.w/2,p.h/2);x.moveTo(p.w/2,-p.h/2);x.lineTo(-p.w/2,p.h/2);x.stroke();
- }else if(p.type==='table'){
-  x.fillStyle='#53636a';x.fillRect(-p.w/2,-p.h/2,p.w,12);x.fillRect(-p.w/2+10,6,8,30);x.fillRect(p.w/2-18,6,8,30);
- }else if(p.type==='med'){
-  x.fillStyle='#40545d';x.fillRect(-p.w/2,-p.h/2,p.w,p.h);x.fillStyle='#9dd7df';x.fillRect(-20,-25,40,48);x.fillStyle='#d6f4f7';x.fillRect(-5,-17,10,32);x.fillRect(-16,-6,32,10);
- }else if(p.type==='comms'){
-  x.fillStyle='#334951';x.fillRect(-50,-29,100,58);x.strokeStyle='#75a9b7';x.strokeRect(-45,-24,90,48);x.fillStyle='#52d9ef';x.fillRect(-30,-10,50,5);x.fillStyle='#a9bac1';x.fillRect(25,-18,10,25);
- }
- x.restore();
- if(p.task!==undefined&&done<=p.task){x.fillStyle='#fff';x.font='bold 11px system-ui';x.textAlign='center';x.fillText(p.name,px,py+p.h/2+16)}
-}
-function terminal(t){let px=sx(t[0]),py=sy(t[1]);rr(px-22,py-22,44,44,9,activeTask&&activeTask[2]===t[2]?'#35d28a':'#1388c3');x.fillStyle='#d8f8ff';x.fillRect(px-12,py-8,24,16);x.fillStyle='#14749d';x.fillRect(px-7,py-4,14,3)}
-function drawEjection(e){
- const px=sx(e.x),py=sy(e.y);x.save();x.translate(px,py);x.globalAlpha=Math.max(0,e.life/110);x.rotate(e.rot);person({...e,color:e.color,name:e.name},true);x.restore();
- // 宇宙へ飛んでいく人物を画面中央付近で追いかける
- x.save();x.globalAlpha=Math.max(0,e.life/110)*.9;x.fillStyle='#fff';x.font='900 18px system-ui';x.textAlign='center';x.shadowColor='#000';x.shadowBlur=6;x.fillText(e.name+' — 追放',W/2,H*.18);x.restore();
-}
-function draw(){
- x.clearRect(0,0,W,H);x.fillStyle='#061018';x.fillRect(0,0,W,H);
- rr(sx(-1120),sy(-620),2150,1250,60,'#14242c');rr(sx(-1085),sy(-585),2080,1180,48,'#263943');
-// 広い船内の床パネル
-x.strokeStyle='#344b55';x.lineWidth=2;for(let gx=-1050;gx<=950;gx+=100){x.beginPath();x.moveTo(sx(gx),sy(-570));x.lineTo(sx(gx),sy(570));x.stroke()}for(let gy=-570;gy<=570;gy+=100){x.beginPath();x.moveTo(sx(-1070),sy(gy));x.lineTo(sx(1010),sy(gy));x.stroke()}
- rooms.forEach(r=>{
- rr(sx(r.x),sy(r.y),r.w,r.h,24,'#17262e');
- // 金属壁の外枠
- x.strokeStyle='#657c86';x.lineWidth=7;x.strokeRect(sx(r.x+3),sy(r.y+3),r.w-6,r.h-6);
- x.strokeStyle='#263d47';x.lineWidth=3;x.strokeRect(sx(r.x+11),sy(r.y+11),r.w-22,r.h-22);
- // 壁パネルの継ぎ目
- x.strokeStyle='#314a55';x.lineWidth=2;
- for(let px=r.x+55;px<r.x+r.w-30;px+=95){x.beginPath();x.moveTo(sx(px),sy(r.y+5));x.lineTo(sx(px),sy(r.y+22));x.stroke();x.beginPath();x.moveTo(sx(px),sy(r.y+r.h-5));x.lineTo(sx(px),sy(r.y+r.h-22));x.stroke();}
- for(let py=r.y+70;py<r.y+r.h-30;py+=82){x.beginPath();x.moveTo(sx(r.x+5),sy(py));x.lineTo(sx(r.x+22),sy(py));x.stroke();x.beginPath();x.moveTo(sx(r.x+r.w-5),sy(py));x.lineTo(sx(r.x+r.w-22),sy(py));x.stroke();}
- // 天井側の細い照明
- x.fillStyle='#75d5e8';x.globalAlpha=.55;x.fillRect(sx(r.x+35),sy(r.y+12),r.w-70,3);x.globalAlpha=1;
- // 壁のボルト
- x.fillStyle='#9aacb3';
- [[r.x+20,r.y+20],[r.x+r.w-20,r.y+20],[r.x+20,r.y+r.h-20],[r.x+r.w-20,r.y+r.h-20]].forEach(v=>{x.beginPath();x.arc(sx(v[0]),sy(v[1]),2.5,0,Math.PI*2);x.fill()});
- x.fillStyle='#8fa6b2';x.font='900 18px system-ui';x.textAlign='center';x.fillText(r.n,sx(r.x+r.w/2),sy(r.y+38));
-});
-function drawDoor(g,closed=false){
- const px=sx(g.x),py=sy(g.y),w=g.w,h=g.h;
- x.save();
- const vertical=h>w;
- // 壁の中に埋め込まれた重厚なドア枠
- x.shadowColor='#000';x.shadowBlur=8;
- const frame=x.createLinearGradient(px,py,px+w,py+h);
- frame.addColorStop(0,'#18262d');frame.addColorStop(.45,'#718791');frame.addColorStop(.55,'#354952');frame.addColorStop(1,'#111b20');
- x.fillStyle=frame;x.fillRect(px-7,py-7,w+14,h+14);
- x.shadowBlur=0;
- x.strokeStyle='#9bb5bf';x.lineWidth=2;x.strokeRect(px-4,py-4,w+8,h+8);
- if(vertical){
-   const mid=px+w/2;
-   // 上下のレール
-   x.fillStyle='#0d171c';x.fillRect(px+7,py-9,w-14,6);x.fillRect(px+7,py+h+3,w-14,6);
-   if(closed){
-     const dg=x.createLinearGradient(px,py,px+w,py);
-     dg.addColorStop(0,'#536872');dg.addColorStop(.5,'#24353d');dg.addColorStop(1,'#536872');
-     x.fillStyle=dg;x.fillRect(px+5,py+2,w/2-5,h-4);x.fillRect(mid,py+2,w/2-5,h-4);
-     x.strokeStyle='#9fb3ba';x.lineWidth=1;x.beginPath();x.moveTo(mid,py+3);x.lineTo(mid,py+h-3);x.stroke();
-   }else{
-     x.fillStyle='#081217';x.fillRect(px+9,py+2,w-18,h-4);
-     x.strokeStyle='#49616c';x.lineWidth=2;x.strokeRect(px+9,py+2,w-18,h-4);
-     x.fillStyle='#65d8ed';x.globalAlpha=.18;x.fillRect(px+13,py+6,w-26,h-12);x.globalAlpha=1;
-   }
- }else{
-   const mid=py+h/2;
-   // 左右のレール
-   x.fillStyle='#0d171c';x.fillRect(px-9,py+7,6,h-14);x.fillRect(px+w+3,py+7,6,h-14);
-   if(closed){
-     const dg=x.createLinearGradient(px,py,px,py+h);
-     dg.addColorStop(0,'#536872');dg.addColorStop(.5,'#24353d');dg.addColorStop(1,'#536872');
-     x.fillStyle=dg;x.fillRect(px+2,py+5,w-4,h/2-5);x.fillRect(px+2,mid,w-4,h/2-5);
-     x.strokeStyle='#9fb3ba';x.lineWidth=1;x.beginPath();x.moveTo(px+3,mid);x.lineTo(px+w-3,mid);x.stroke();
-   }else{
-     x.fillStyle='#081217';x.fillRect(px+2,py+9,w-4,h-18);
-     x.strokeStyle='#49616c';x.lineWidth=2;x.strokeRect(px+2,py+9,w-4,h-18);
-     x.fillStyle='#65d8ed';x.globalAlpha=.18;x.fillRect(px+7,py+13,w-14,h-26);x.globalAlpha=1;
-   }
- }
- // 警告ランプ
- x.fillStyle=closed?'#ef4b4b':'#46d98a';x.beginPath();x.arc(px+w/2,py+h/2,3.5,0,Math.PI*2);x.fill();
- x.shadowColor=closed?'#ff3d3d':'#4dffab';x.shadowBlur=closed?10:5;x.fill();x.shadowBlur=0;
- x.restore();
-}
-roomDoors.forEach(g=>drawDoor(g,false));
- tasks.forEach((t,i)=>{if(i>=done&&!(i===1&&props.some(p=>p.type==='breaker'&&p.task===1)))terminal(t)});props.forEach(drawProp);drawRoomClutter(); vents.forEach((v,i)=>{let px=sx(v[0]),py=sy(v[1]);x.beginPath();x.ellipse(px,py,28,14,0,0,7);x.fillStyle='#111b20';x.fill();x.strokeStyle='#667983';x.lineWidth=3;x.stroke();if(i===0&&sabotage){x.fillStyle='#ff5050';x.globalAlpha=.55;x.beginPath();x.arc(px,py,34,0,7);x.fill();x.globalAlpha=1}});
- npcs.forEach(q=>{if(q.alive)person(q)});Object.values(remotePlayers).forEach(q=>{if(q.id!==myPlayerId&&q.alive!==false)person({...q,name:q.name||'PLAYER'},true)});doors.forEach(r=>{
- const g={x:r[0],y:r[1],w:r[2],h:r[3]};
- drawDoor(g,true);
-});bodies.forEach(q=>drawBody(q));ejections.forEach(e=>drawEjection(e));
- if(player.alive)person({...player,name:'YOU'});
-}
-function distXY(a,b){return Math.hypot(a.x-b[0],a.y-b[1])}
-function setLog(s){document.getElementById('log').textContent=s}
-function end(title,text){ended=true;document.getElementById('endTitle').textContent=title;document.getElementById('endText').textContent=text;document.getElementById('end').style.display='flex'}
-function kill(q){q.alive=false;bodies.push({x:q.x,y:q.y,color:q.color,name:q.name});setLog(q.name+'が倒れている…');}
-function eject(q){
- if(!q)return;
- q.alive=false;
-ejections.push({x:q.x,y:q.y,color:q.color,name:q.name,life:110,rot:0,vx:(Math.random()-.5)*1.2,vy:-2.2,vr:(Math.random()-.5)*.08});
- setLog(q.name+'が宇宙へ放出された！');
- setTimeout(()=>{ejections=ejections.filter(e=>e.name!==q.name||e.life>0)},1400);
-}
-function updateEjections(){
- for(const e of ejections){e.x+=e.vx;e.y+=e.vy;e.vy-=.015;e.rot+=e.vr;e.life--;}
- const focus=ejections[ejections.length-1];
- if(focus&&focus.life>0){cam.x+=(focus.x-cam.x)*.16;cam.y+=(focus.y-cam.y)*.16;}
- else if(player.alive){cam.x+=(player.x-cam.x)*.12;cam.y+=(player.y-cam.y)*.12;}
-}
-function closestBody(){let b=null,bd=999;for(const q of bodies){let z=Math.hypot(player.x-q.x,player.y-q.y);if(z<bd){bd=z;b=q}}return bd<=44?b:null}
-function checkWin(){if(player.role==='インポスター'&&npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','クルーを全員見つけた！');return true}if(done>=tasks.length){end('CREW WIN!','全タスク完了！');return true}if(npcs.filter(q=>q.alive&&q.role==='crew').length===0){end('IMPOSTOR WIN!','インポスターがクルーを上回った！');return true}return false}
-function renderChat(){const el=document.getElementById('chatlog');el.innerHTML=chatMessages.map(m=>'<div class="chatline"><b>'+m.n+'</b>：'+m.t+'</div>').join('');el.scrollTop=el.scrollHeight}
-let meetingVotes={};
-let meetingResolving=false;
-let aiMeetingCooldown=0;
-let meetingVoteTimer=null;
-
-function aiChooseVote(q){
- const candidates=npcs.filter(z=>z.alive&&z.id!==q.id&&z.role!=='impostor');
- if(player.alive&&player.role!=='インポスター')candidates.push({id:0,name:'YOU',x:player.x,y:player.y,role:'crew',alive:true});
- if(!candidates.length)return 'skip';
- const body=nearestBodyTo(q);
- if(body){
-  const victim=npcs.find(z=>z.name===body.name);
-  if(victim&&victim.alive&&victim.role!=='impostor')return victim.id;
- }
- // 距離・部屋・ランダム性を合わせてAIごとに判断
- let best=candidates[0],bestScore=-Infinity;
- candidates.forEach(z=>{
-  let score=Math.random()*3;
-  const d=Math.hypot(z.x-q.x,z.y-q.y);
-  score+=(260-Math.min(d,260))/130;
-  if(roomOf(z)===roomOf(q))score+=1.2;
-  if(z.id===0)score+=Math.random()<.35?2:0;
-  if(score>bestScore){bestScore=score;best=z;}
- });
- return best.id;
-}
-
-function openMeeting(reason='会議が始まりました。'){
- if(ended)return;
- meeting=true;meetingResolving=false;meetingVotes={};
- if(meetingVoteTimer){clearTimeout(meetingVoteTimer);meetingVoteTimer=null;}
- document.getElementById('meetingText').textContent=reason;
- document.getElementById('meeting').style.display='flex';
- document.getElementById('voteResult').style.display='none';
- renderChat();
- const v=document.getElementById('votes');v.innerHTML='';
- const people=[...npcs.filter(q=>q.alive),...(player.alive?[{id:0,name:'YOU',color:player.color,role:player.role,alive:true}]:[])];
- people.forEach(q=>{
-  const b=document.createElement('button');
-  b.textContent=q.name;
-  b.onclick=()=>vote(q.id);
-  v.appendChild(b);
- });
- const castAIVotes=()=>{
-  if(!meeting||ended)return;
-  npcs.filter(q=>q.alive).forEach(q=>{
-   if(meetingVotes[q.id]===undefined)meetingVotes[q.id]=aiChooseVote(q);
-  });
-  renderChat();
-  if(allMeetingVotesCast())resolveMeeting();
- };
- // AIは必ず全員が1票入れる
- if(aiMode)setTimeout(()=>{castAIVotes();aiMeeting();},500);
- // プレイヤーが押さなくても、時間切れならスキップ票を入れて全員分を揃える
- meetingVoteTimer=setTimeout(()=>{
-  if(!meeting||ended)return;
-  castAIVotes();
-  if(player.alive&&meetingVotes[0]===undefined)meetingVotes[0]='skip';
-  if(allMeetingVotesCast())resolveMeeting();
- },3500);
-}
-
-function resolveMeeting(){
- if(!meeting||meetingResolving)return;
- const counts={};
- Object.values(meetingVotes).forEach(id=>{counts[id]=(counts[id]||0)+1});
- let winner='skip',max=0,tie=false;
- Object.entries(counts).forEach(([id,n])=>{
-  if(id==='skip')return;
-  if(n>max){winner=id;max=n;tie=false}
-  else if(n===max&&n>0){tie=true}
- });
- const totalVoters=Object.keys(meetingVotes).length;
- const required=Math.max(2,Math.floor(totalVoters/2)+1);
- // 1票だけでは絶対に追放しない。過半数＋最低2票が必要。
- if(tie||max<required)winner='skip';
- meetingResolving=true;
- if(meetingVoteTimer){clearTimeout(meetingVoteTimer);meetingVoteTimer=null;}
- const target=winner==='skip'?null:npcs.find(q=>String(q.id)===String(winner))||(String(winner)==='0'?player:null);
- const box=document.getElementById('voteResult');
- box.textContent=target?'🗳️ '+target.name+' に '+max+'票！':'🗳️ 投票はスキップ／同数票！';
- box.style.display='block';
- box.animate([{transform:'scale(.6)',opacity:0},{transform:'scale(1.12)',opacity:1},{transform:'scale(1)',opacity:1}],{duration:700});
- setTimeout(()=>{
-  document.getElementById('meeting').style.display='none';meeting=false;meetingResolving=false;
-  if(target){
-   eject(target);
-   setLog(target.name+'が投票で追放された。');
-   if(target.role==='インポスター'){end('CREW WIN!','インポスターを見つけた！');return}
-  }else setLog('投票はスキップされた。');
-  checkWin();setTimeout(()=>setLog('会議終了。クルーは再び行動開始。'),650);
- },1200);
-}
-
-function allMeetingVotesCast(){
- const need=npcs.filter(q=>q.alive).length+(player.alive?1:0);
- return Object.keys(meetingVotes).length>=need;
-}
-
-function vote(id){
- if(!meeting||meetingResolving)return;
- meetingVotes[0]=id;
- const buttons=[...document.querySelectorAll('#votes button')];
- buttons.forEach(b=>{b.disabled=true;b.style.transform='scale(.96)'});
- document.getElementById('voteResult').textContent='🗳️ AIも投票済み。票を集計中…';
- document.getElementById('voteResult').style.display='block';
- if(allMeetingVotesCast())setTimeout(resolveMeeting,450);
-}
-
-function aiCanCallMeeting(){
- if(!aiMode||ended||meeting||aiMeetingCooldown>0)return false;
- const alive=npcs.filter(q=>q.alive);
- const body=alive.some(q=>nearestBodyTo(q)&&Math.hypot(nearestBodyTo(q).x-q.x,nearestBodyTo(q).y-q.y)<90);
- if(body)return true;
- return Math.random()<0.025;
-}
-
-function aiMaybeCallMeeting(){
- if(!aiCanCallMeeting())return;
- const q=npcs.filter(z=>z.alive)[Math.floor(Math.random()*npcs.filter(z=>z.alive).length)];
- if(!q)return;
- aiMeetingCooldown=8;
- openMeeting('📢 '+q.name+' が緊急会議を開きました。');
-}
-
-document.getElementById('report').onclick=()=>{if(closestBody())openMeeting('死体が通報されました。');else setLog('近くに通報できる死体がありません。')};
-document.getElementById('meetingBtn').onclick=()=>openMeeting('緊急会議が招集されました。');
-setInterval(()=>{if(aiMeetingCooldown>0)aiMeetingCooldown--;if(!ended&&aiMode)aiMaybeCallMeeting();if(!ended&&Math.random()<.18)closeDoors()},7000);
-document.getElementById('skip').onclick=()=>vote('skip');
+document.getElementById('skip').onclick=()=>{document.getElementById('meeting').style.display='none';meeting=false;setLog('投票をスキップしました。')};
 document.getElementById('chatSend').onclick=()=>{const input=document.getElementById('chatInput');if(input.value.trim()){chatMessages.push({n:'YOU',t:input.value.trim()});input.value='';renderChat();setTimeout(()=>{if(meeting){const alive=npcs.filter(q=>q.alive);const q=alive[Math.floor(Math.random()*alive.length)];if(q){chatMessages.push({n:q.name,t:['私は怪しいと思う人がいる。','さっき通信室にいたよ。','誰かベントを見た？','証拠を確認しよう。'][Math.floor(Math.random()*4)]});renderChat()}}},500)}};
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('chatSend').click()});
 function sabotageNow(){if(sabotage||ended)return;sabotage=true;sabLeft=20;document.getElementById('sabotage').style.display='block';setLog('インポスターがサボタージュを発生させた！');}
