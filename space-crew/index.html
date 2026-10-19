@@ -257,9 +257,9 @@ function canMoveTo(fromX,fromY,toX,toY){
  return relevant.every(g=>pathUsesDoor(rooms[roomDoors.indexOf(g)]));
 }
 function roomOf(q){
- // 見た目の体全体が部屋の内側に収まっている時だけ、その部屋にいると判定する。
- const r=rooms.find(r=>q.x-28>=r.x+8&&q.x+28<=r.x+r.w-8&&q.y-42>=r.y+8&&q.y+26<=r.y+r.h-8);
- return r?r.n:'Corridor';
+ // 中心が属する部屋の中に、見た目の体全体が収まっている時だけ部屋名を表示。
+ const r=roomAt(q.x,q.y);
+ return r&&q.x-28>=r.x+8&&q.x+28<=r.x+r.w-8&&q.y-42>=r.y+8&&q.y+26<=r.y+r.h-8?r.n:'Corridor';
 }
 function updateLocationName(){const el=document.getElementById('locationName');if(el)el.textContent=roomOf(player)}
 function nearestCrew(q){return npcs.filter(z=>z.alive&&z.role==='crew').sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
@@ -342,7 +342,7 @@ function updateRoleUI(){
 }
 assignRoles();
 function resize(){d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*d;c.height=H*d;x.setTransform(d,0,0,d,0,0)}addEventListener('resize',resize);resize();
-const WORLD_VIEW_SCALE=1.18;function sx(a){return (a-cam.x)*WORLD_VIEW_SCALE+W/2}function sy(a){return (a-cam.y)*WORLD_VIEW_SCALE+H/2}function rr(px,py,w,h,r,f){x.fillStyle=f;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
+function sx(a){return a-cam.x+W/2}function sy(a){return a-cam.y+H/2}function rr(px,py,w,h,r,f){x.fillStyle=f;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
 function drawBody(q){
  const px=sx(q.x),py=sy(q.y);x.save();x.translate(px,py);
  x.fillStyle=q.color;x.beginPath();x.moveTo(-22,15);x.lineTo(-18,5);x.lineTo(-12,10);x.lineTo(-15,15);x.quadraticCurveTo(-7,24,0,24);x.quadraticCurveTo(7,24,15,15);x.lineTo(12,10);x.lineTo(18,5);x.lineTo(22,15);x.quadraticCurveTo(10,25,0,24);x.quadraticCurveTo(-10,25,-22,15);x.fill();
@@ -465,6 +465,8 @@ function drawEjection(e){
 }
 function draw(){
  x.clearRect(0,0,W,H);x.fillStyle='#061018';x.fillRect(0,0,W,H);
+ // 船内の表示倍率を上げ、部屋・壁・設備をまとめて拡大する（ドア位置もずれない）。
+ x.save();x.translate(W/2,H/2);x.scale(1.12,1.12);x.translate(-W/2,-H/2);
  rr(sx(-1120),sy(-620),2150,1250,60,'#14242c');rr(sx(-1085),sy(-585),2080,1180,48,'#263943');
 // 広い船内の床パネル
 x.strokeStyle='#344b55';x.lineWidth=2;for(let gx=-1050;gx<=950;gx+=100){x.beginPath();x.moveTo(sx(gx),sy(-570));x.lineTo(sx(gx),sy(570));x.stroke()}for(let gy=-570;gy<=570;gy+=100){x.beginPath();x.moveTo(sx(-1070),sy(gy));x.lineTo(sx(1010),sy(gy));x.stroke()}
@@ -545,6 +547,7 @@ roomDoors.forEach(g=>drawDoor(g,false));
  drawDoor(g,true);
 });bodies.forEach(q=>drawBody(q));ejections.forEach(e=>drawEjection(e));
  if(player.alive)person({...player,name:'YOU'});
+ x.restore();
  drawMinimap();
 }
 function drawMinimap(){
