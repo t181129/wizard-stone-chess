@@ -242,10 +242,13 @@ function canMoveTo(fromX,fromY,toX,toY){
  const fullRoom=rooms.find(r=>fullInside(toX,toY,r)&&roomAt(toX,toY)===r)||null;
  // 同じ部屋の中で、体全体が収まる範囲の移動だけはそのまま許可。
  if(from&&from===to&&fullRoom===from)return true;
- // 部屋の壁に体がかかる位置は、対応するドアを通る時だけ許可する。
- for(const r of rooms){
-  if(overlaps(toX,toY,r)&&!fullInside(toX,toY,r)){
-   if(!pathUsesDoor(r)&&!nearDoor(toX,toY,roomDoors[rooms.indexOf(r)]))return false;
+ // 体全体がどの部屋にも収まらない時だけ、壁へのはみ出しを検査する。
+ const targetFullyInside=rooms.some(r=>fullInside(toX,toY,r));
+ if(!targetFullyInside){
+  for(const r of rooms){
+   if(overlaps(toX,toY,r)&&!fullInside(toX,toY,r)){
+    if(!pathUsesDoor(r)&&!nearDoor(toX,toY,roomDoors[rooms.indexOf(r)]))return false;
+   }
   }
  }
  // 部屋へ入る場合は、その部屋のドアを経由。別室へ移る場合は両方のドアを経由する。
