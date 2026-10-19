@@ -167,7 +167,11 @@ function bodyRectContact(px,py,rx,ry,r=22){
  return Math.hypot(px-nx,py-ny)<=r;
 }
 function bodyContact(a,b,extra=0){
- return Math.hypot(a.x-b.x,a.y-b.y)<=44+extra;
+ // キャラクターの胴体（幅約44・高さ約66）の当たり判定。胴体の輪郭が触れた時だけ接触扱い。
+ const dx=Math.abs(a.x-b.x),dy=Math.abs(a.y-b.y);
+ const rx=44+extra*2,ry=66+extra*2;
+ if(dx>rx||dy>ry)return false;
+ return (dx*dx)/(rx*rx)+(dy*dy)/(ry*ry)<=1;
 }
 function bodyTouchesPoint(a,px,py,extra=0){
  return Math.hypot(a.x-px,a.y-py)<=22+extra;
