@@ -694,7 +694,7 @@ function update(){
   if(sabotage&&tasks.some(t=>bodyTouchesPoint(player,t[0],t[1],6)))repairSabotage();
   if(ghost){setLog('👻 ゴーストモード：自由に船内を探索中');}
   if(aiTimer++%5===0&&(isHost||!multi||aiMode))moveAI();
-  if(aiMode&&!meeting&&bodies.length){const found=bodies.find(b=>!b.reported&&npcs.some(q=>q.alive&&Math.hypot(q.x-b.x,q.y-b.y)<=58));if(found){found.reported=true;const finder=npcs.filter(q=>q.alive).sort((a,b)=>Math.hypot(a.x-found.x,a.y-found.y)-Math.hypot(b.x-found.x,b.y-found.y))[0];if(finder)chatMessages.push({n:finder.name,t:'死体を発見した！すぐに緊急会議を招集する。'});renderChat();openMeeting('🚨 '+(finder?finder.name:'AI')+' が死体を発見！生存者全員を緊急会議に招集しました。');}
+  if(aiMode&&!meeting&&bodies.length){const found=bodies.find(b=>!b.reported&&npcs.some(q=>q.alive&&Math.hypot(q.x-b.x,q.y-b.y)<=58));if(found){found.reported=true;const finder=npcs.filter(q=>q.alive).sort((a,b)=>Math.hypot(a.x-found.x,a.y-found.y)-Math.hypot(b.x-found.x,b.y-found.y))[0];if(finder)chatMessages.push({n:finder.name,t:'死体を発見した！すぐに緊急会議を招集する。'});renderChat();openMeeting('🚨 '+(finder?finder.name:'AI')+' が死体を発見！生存者全員を緊急会議に招集しました。');}}
   if(killCooldown>0)killCooldown--;if(playerImpostorKillCooldown>0)playerImpostorKillCooldown--;
   if(killCooldown===0&&npcs.some(q=>q.role==='impostor'&&q.alive))document.getElementById('log').dataset.ready='1';
   if(player.role!=='インポスター'&&done<tasks.length&&!activeTask){
