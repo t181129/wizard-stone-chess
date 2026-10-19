@@ -12,7 +12,7 @@ button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:whit
 #chat{display:flex;gap:6px;margin:10px 0}.chatline{background:#142833;border-radius:8px;padding:6px 8px;text-align:left;margin:4px 0;font-size:13px}.chatbox{max-height:150px;overflow:auto;text-align:left;background:#071017;border-radius:10px;padding:6px}
 .voteRow{display:flex;align-items:center;justify-content:space-between;gap:6px;background:#132630;border-radius:9px;padding:6px}.voteBar{height:8px;background:#263942;border-radius:8px;flex:1;overflow:hidden}.voteBar i{display:block;height:100%;width:0;background:#55c8ef;transition:width .7s}.result{font-size:26px;font-weight:1000;animation:pop .7s ease}@keyframes pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
 .vent{fill:#111b20;stroke:#667983;stroke-width:3}.ventGlow{animation:pulse 1.2s infinite}@keyframes pulse{50%{opacity:.45}}
-#meeting .box{position:relative}
+#meeting .box{position:relative;width:100vw;height:100vh;max-width:none;max-height:none;overflow:auto;border-radius:0;padding:clamp(12px,3vw,28px);display:flex;flex-direction:column;justify-content:center}#meeting h2{margin:4px 0 10px}#meeting .votes{grid-template-columns:repeat(2,minmax(0,1fr));max-width:760px;width:100%;margin:0 auto}#meeting .box>#chatlog{width:100%;max-width:760px;margin:8px auto}#meeting .box>#chat{width:100%;max-width:760px;margin:8px auto}#meeting .box>#voteResult{margin:10px 0}
 
 /* iPhone / narrow-screen layout: keep the title and top panels from overlapping */
 @media (max-width:600px){
@@ -612,12 +612,20 @@ function resolveMeeting(){
 }
 
 function vote(id){
- if(!meeting||meetingResolving)return;
+ if(!meeting||meetingResolving||Object.prototype.hasOwnProperty.call(meetingVotes,0))return;
  meetingVotes[0]=id;
  const buttons=[...document.querySelectorAll('#votes button')];buttons.forEach(b=>{b.disabled=true;b.style.transform='scale(.96)'});
- document.getElementById('voteResult').textContent='🗳️ AIも投票を考えています…';
+ // AIモードでは生存AI全員が必ず投票してから集計する。
+ if(aiMode){
+  npcs.filter(q=>q.alive).forEach(q=>{
+   if(!Object.prototype.hasOwnProperty.call(meetingVotes,q.id))meetingVotes[q.id]=aiChooseVote(q);
+  });
+ }
+ const required=npcs.filter(q=>q.alive).length+(player.alive?1:0);
+ const cast=Object.keys(meetingVotes).length;
+ document.getElementById('voteResult').textContent=cast>=required?'🗳️ 全員の投票を集計中…':'🗳️ 投票受付中 '+cast+'/'+required;
  document.getElementById('voteResult').style.display='block';
- setTimeout(resolveMeeting,900);
+ if(cast>=required)setTimeout(resolveMeeting,900);
 }
 
 function aiCanCallMeeting(){
@@ -639,7 +647,7 @@ function aiMaybeCallMeeting(){
 document.getElementById('report').onclick=()=>{if(closestBody())openMeeting('死体が通報されました。');else setLog('近くに通報できる死体がありません。')};
 document.getElementById('meetingBtn').onclick=()=>openMeeting('緊急会議が招集されました。');
 setInterval(()=>{if(aiMeetingCooldown>0)aiMeetingCooldown--;if(!ended&&aiMode)aiMaybeCallMeeting();if(!ended&&Math.random()<.18)closeDoors()},7000);
-document.getElementById('skip').onclick=()=>{document.getElementById('meeting').style.display='none';meeting=false;setLog('投票をスキップしました。')};
+document.getElementById('skip').onclick=()=>vote('skip');
 document.getElementById('chatSend').onclick=()=>{const input=document.getElementById('chatInput');if(input.value.trim()){chatMessages.push({n:'YOU',t:input.value.trim()});input.value='';renderChat();setTimeout(()=>{if(meeting){const alive=npcs.filter(q=>q.alive);const q=alive[Math.floor(Math.random()*alive.length)];if(q){chatMessages.push({n:q.name,t:['私は怪しいと思う人がいる。','さっき通信室にいたよ。','誰かベントを見た？','証拠を確認しよう。'][Math.floor(Math.random()*4)]});renderChat()}}},500)}};
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('chatSend').click()});
 function sabotageNow(){if(sabotage||ended)return;sabotage=true;sabLeft=20;document.getElementById('sabotage').style.display='block';setLog('インポスターがサボタージュを発生させた！');}
@@ -666,11 +674,27 @@ function moveAI(){
  for(const q of npcs){if(!q.alive)continue;const mem=aiInit(q);mem.lastRoom=roomOf(q);
 
   if(q.role==='impostor'){
-   if(Math.random()<0.002)sabotageNow();
-   let target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-q.x,z.y-q.y)<260);
-   if(target){let dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;const nx=q.x+dx/L*1.35,ny=q.y+dy/L*1.45;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny};
-    if(Math.hypot(q.x-target.x,q.y-target.y)<34){impostorAttack(q);q.x-=8;}
-   }else{const nx=q.x+Math.sin(Date.now()/650+q.id)*.8,ny=q.y+Math.cos(Date.now()/720+q.id)*.8;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}}
+   // AIインポスターは周囲を自分で評価し、近いクルーを追跡して機会があれば自動キルする。
+   if(Math.random()<0.004)sabotageNow();
+   const targets=npcs.filter(z=>z.alive&&z.role==='crew').map(z=>({z,d:Math.hypot(z.x-q.x,z.y-q.y)}));
+   if(player.alive&&player.role!=='インポスター')targets.push({z:player,d:Math.hypot(player.x-q.x,player.y-q.y)});
+   targets.sort((a,b)=>a.d-b.d);
+   const choice=targets.find(t=>t.d<520);
+   const target=choice?choice.z:null;
+   if(target){
+    const dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;
+    const nx=q.x+dx/L*1.55,ny=q.y+dy/L*1.55;
+    if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}
+    if(bodyContact(q,target)&&sameActionSpace(q,target)&&killCooldown===0){
+     if(target===player){
+      if(player.alive){bodies.push({x:player.x,y:player.y,color:player.color,name:'YOU'});player.alive=false;ghost=true;setLog(q.name+' があなたをキルした！');killCooldown=180;}
+     }else{impostorAttack(q)}
+    }
+   }else{
+    // 目標がいない時はタスク地点や別室へ移動し、停止し続けない。
+    const t=tasks[(q.id+Math.floor(aiTimer/90))%tasks.length],dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;
+    const nx=q.x+dx/L*.9,ny=q.y+dy/L*.9;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}
+   }
   }else{
    let targetTask=tasks[Math.min((done+q.id)%tasks.length,tasks.length-1)];
    let t=targetTask;let dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;const nx=q.x+dx/L*1.25,ny=q.y+dy/L*1.25;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}
