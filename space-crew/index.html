@@ -579,7 +579,7 @@ function openMeeting(reason='会議が始まりました。'){
  // AIは会議開始直後から、それぞれ独立して考えて投票
  if(aiMode)setTimeout(()=>{
   if(!meeting||ended)return;
-  npcs.filter(q=>q.alive).forEach(q=>{meetingVotes[q.id]=aiChooseVote(q)});
+  npcs.filter(q=>q.alive).forEach(q=>{if(q.role!=='impostor'&&Math.random()<.7)aiChat(q);meetingVotes[q.id]=aiChooseVote(q)});
   renderChat();
  },500);
 }
@@ -668,12 +668,12 @@ function moveAI(){
   if(q.role==='impostor'){
    if(Math.random()<0.002)sabotageNow();
    let target=npcs.find(z=>z.alive&&z.role==='crew'&&Math.hypot(z.x-q.x,z.y-q.y)<260);
-   if(target){let dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;const nx=q.x+dx/L*.52,ny=q.y+dy/L*.65;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny};
+   if(target){let dx=target.x-q.x,dy=target.y-q.y,L=Math.hypot(dx,dy)||1;const nx=q.x+dx/L*1.35,ny=q.y+dy/L*1.45;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny};
     if(Math.hypot(q.x-target.x,q.y-target.y)<34){impostorAttack(q);q.x-=8;}
-   }else{const nx=q.x+Math.sin(Date.now()/900+q.id)*.35,ny=q.y+Math.cos(Date.now()/1000+q.id)*.35;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}}
+   }else{const nx=q.x+Math.sin(Date.now()/650+q.id)*.8,ny=q.y+Math.cos(Date.now()/720+q.id)*.8;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}}
   }else{
    let targetTask=tasks[Math.min((done+q.id)%tasks.length,tasks.length-1)];
-   let t=targetTask;let dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;const nx=q.x+dx/L*.65,ny=q.y+dy/L*.65;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}
+   let t=targetTask;let dx=t[0]-q.x,dy=t[1]-q.y,L=Math.hypot(dx,dy)||1;const nx=q.x+dx/L*1.25,ny=q.y+dy/L*1.25;if(canMoveTo(q.x,q.y,nx,ny)){q.x=nx;q.y=ny}
   }
  }
 }
@@ -684,7 +684,7 @@ function taskGame(){
  if(taskStage>=3){activeTask=null;const completedIndex=done;done++;document.getElementById('status').textContent='タスク '+done+' / '+tasks.length;document.getElementById('fill').style.width=(done/tasks.length*100)+'%';setLog('タスク完了！');if(isHost)broadcastState();else if(hostConn&&hostConn.open)hostConn.send({type:'task',index:completedIndex});checkWin()}
 }
 c.addEventListener('click',e=>{if(activeTask&&!meeting&&!ended)taskGame()});
-function closeDoors(){doors=[[-590,-52,70,28],[-10,-82,70,28],[270,-270,28,70],[-670,28,70,28],[20,28,70,28],[390,190,28,70],[-930,-275,70,28],[795,-275,70,28],[-930,248,70,28],[660,248,70,28]];setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
+function closeDoors(){doors=roomDoors.map(g=>[g.x,g.y,g.w,g.h]);setLog('🚪 ドアが閉鎖された！');setTimeout(()=>doors=[],4500)}
 function update(){
  updateEjections();
  updateLocationName();
@@ -693,7 +693,8 @@ function update(){
   if(sabotage){if(aiTimer%60===0){sabLeft--;document.getElementById('sabTime').textContent=sabLeft}if(sabLeft<=0){end('IMPOSTOR WIN!','サボタージュを止められなかった！');return}}
   if(sabotage&&tasks.some(t=>bodyTouchesPoint(player,t[0],t[1],6)))repairSabotage();
   if(ghost){setLog('👻 ゴーストモード：自由に船内を探索中');}
-  if(aiTimer++%15===0&&(isHost||!multi||aiMode))moveAI();
+  if(aiTimer++%5===0&&(isHost||!multi||aiMode))moveAI();
+  if(aiMode&&!meeting&&bodies.length){const found=bodies.find(b=>!b.reported&&npcs.some(q=>q.alive&&Math.hypot(q.x-b.x,q.y-b.y)<=58));if(found){found.reported=true;const finder=npcs.filter(q=>q.alive).sort((a,b)=>Math.hypot(a.x-found.x,a.y-found.y)-Math.hypot(b.x-found.x,b.y-found.y))[0];if(finder)chatMessages.push({n:finder.name,t:'死体を発見した！すぐに緊急会議を招集する。'});renderChat();openMeeting('🚨 '+(finder?finder.name:'AI')+' が死体を発見！生存者全員を緊急会議に招集しました。');}
   if(killCooldown>0)killCooldown--;if(playerImpostorKillCooldown>0)playerImpostorKillCooldown--;
   if(killCooldown===0&&npcs.some(q=>q.role==='impostor'&&q.alive))document.getElementById('log').dataset.ready='1';
   if(player.role!=='インポスター'&&done<tasks.length&&!activeTask){
