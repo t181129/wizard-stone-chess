@@ -15,6 +15,7 @@ button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:whit
 #meeting .box{position:relative;width:100vw;height:100vh;max-width:none;max-height:none;overflow:auto;border-radius:0;padding:clamp(12px,3vw,28px);display:flex;flex-direction:column;justify-content:center}#meeting h2{margin:4px 0 10px}#meeting .votes{grid-template-columns:repeat(2,minmax(0,1fr));max-width:760px;width:100%;margin:0 auto}#meeting .box>#chatlog{width:100%;max-width:760px;margin:8px auto}#meeting .box>#chat{width:100%;max-width:760px;margin:8px auto}#meeting .box>#voteResult{margin:10px 0}
 
 /* iPhone / narrow-screen layout: keep the title and top panels from overlapping */
+.card.bottom{left:auto;right:10px;max-width:48vw}
 @media (max-width:600px){
  .top{top:7px;font-size:clamp(16px,4.8vw,21px);max-width:48vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  #ui>.card:not(.right):not(.bottom){top:42px;left:8px;width:34vw;min-width:0;padding:7px;font-size:12px}
@@ -22,7 +23,7 @@ button{border:0;border-radius:9px;padding:9px 12px;background:#1976a5;color:whit
  #ui>.card.right button{font-size:11px;padding:7px 8px;margin:2px 0}
  #ui>.card.right #roomCode{max-width:25vw;width:72px!important;font-size:12px}
  #ui>.card.right .small{font-size:10px;line-height:1.3;overflow-wrap:anywhere}
- #ui>.card.bottom{left:8px;bottom:8px;top:auto;max-width:48vw;padding:7px}
+ #ui>.card.bottom{left:auto;right:8px;bottom:8px;top:auto;max-width:48vw;padding:7px}
  #sabotage{top:132px;max-width:90vw;font-size:12px}
 }
 @media (max-width:370px){
@@ -224,23 +225,43 @@ function closedDoorPathHit(fromX,fromY,toX,toY){
 function roomAt(px,py){return rooms.find(r=>px>=r.x&&px<=r.x+r.w&&py>=r.y&&py<=r.y+r.h)||null}
 function pointInsideRoom(px,py,r){return px>r.x+8&&px<r.x+r.w-8&&py>r.y+8&&py<r.y+r.h-8}
 function canMoveTo(fromX,fromY,toX,toY){
- const from=roomAt(fromX,fromY),to=roomAt(toX,toY);
  if(closedDoorPathHit(fromX,fromY,toX,toY))return false;
  if(!canMoveAroundProps(fromX,fromY,toX,toY))return false;
+ const fullInside=(px,py,r)=>px-28>=r.x+8&&px+28<=r.x+r.w-8&&py-42>=r.y+8&&py+26<=r.y+r.h-8;
+ const overlaps=(px,py,r)=>px+28>r.x+8&&px-28<r.x+r.w-8&&py+26>r.y+8&&py-42<r.y+r.h-8;
+ const nearDoor=(px,py,g)=>g&&px>=g.x-20&&px<=g.x+g.w+20&&py>=g.y-20&&py<=g.y+g.h+20;
+ const pathUsesDoor=(r)=>{
+  const g=roomDoors[rooms.indexOf(r)];if(!g)return false;
+  for(let i=0;i<=24;i++){
+   const t=i/24,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
+   if(nearDoor(px,py,g))return true;
+  }
+  return false;
+ };
+ // 体全体がどれかの部屋内に収まっていれば、通常の室内移動は許可。
+ if(rooms.some(r=>fullInside(toX,toY,r)))return true;
+ // 部屋の壁に体がかかる位置は、対応するドアを通る時だけ許可する。
+ for(const r of rooms){
+  if(overlaps(toX,toY,r)&&!fullInside(toX,toY,r)){
+   if(!pathUsesDoor(r)&&!nearDoor(toX,toY,roomDoors[rooms.indexOf(r)]))return false;
+  }
+ }
+ // 部屋と重ならない通路上の移動は許可。部屋から部屋への移動はドア経由のみ。
+ const from=roomAt(fromX,fromY),to=roomAt(toX,toY);
  if(from===to)return true;
- // 部屋の壁は通り抜け不可。移動線が「出発側または到着側の部屋専用ドア」を通る時だけ境界を越えられる。
- const fromDoor=from?roomDoors[rooms.indexOf(from)]:null;
- const toDoor=to?roomDoors[rooms.indexOf(to)]:null;
- const relevant=[fromDoor,toDoor].filter(Boolean);
- if(!relevant.length)return false;
- const steps=20;
- for(let i=0;i<=steps;i++){
-  const t=i/steps,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
-  if(relevant.some(g=>px>=g.x-14&&px<=g.x+g.w+14&&py>=g.y-14&&py<=g.y+g.h+14))return true;
+ const relevant=[from,to].filter(Boolean).map(r=>roomDoors[rooms.indexOf(r)]).filter(Boolean);
+ if(!relevant.length)return !rooms.some(r=>overlaps(toX,toY,r));
+ for(let i=0;i<=24;i++){
+  const t=i/24,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
+  if(relevant.some(g=>nearDoor(px,py,g)))return true;
  }
  return false;
 }
-function roomOf(q){const r=rooms.find(r=>q.x>=r.x&&q.x<=r.x+r.w&&q.y>=r.y&&q.y<=r.y+r.h);return r?r.n:'Corridor'}
+function roomOf(q){
+ // 見た目の体全体が部屋の内側に収まっている時だけ、その部屋にいると判定する。
+ const r=rooms.find(r=>q.x-28>=r.x+8&&q.x+28<=r.x+r.w-8&&q.y-42>=r.y+8&&q.y+26<=r.y+r.h-8);
+ return r?r.n:'Corridor';
+}
 function updateLocationName(){const el=document.getElementById('locationName');if(el)el.textContent=roomOf(player)}
 function nearestCrew(q){return npcs.filter(z=>z.alive&&z.role==='crew').sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
 function nearestBodyTo(q){return bodies.slice().sort((a,b)=>Math.hypot(a.x-q.x,a.y-q.y)-Math.hypot(b.x-q.x,b.y-q.y))[0]}
@@ -322,7 +343,7 @@ function updateRoleUI(){
 }
 assignRoles();
 function resize(){d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*d;c.height=H*d;x.setTransform(d,0,0,d,0,0)}addEventListener('resize',resize);resize();
-function sx(a){return a-cam.x+W/2}function sy(a){return a-cam.y+H/2}function rr(px,py,w,h,r,f){x.fillStyle=f;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
+const WORLD_VIEW_SCALE=1.18;function sx(a){return (a-cam.x)*WORLD_VIEW_SCALE+W/2}function sy(a){return (a-cam.y)*WORLD_VIEW_SCALE+H/2}function rr(px,py,w,h,r,f){x.fillStyle=f;x.beginPath();x.roundRect(px,py,w,h,r);x.fill()}
 function drawBody(q){
  const px=sx(q.x),py=sy(q.y);x.save();x.translate(px,py);
  x.fillStyle=q.color;x.beginPath();x.moveTo(-22,15);x.lineTo(-18,5);x.lineTo(-12,10);x.lineTo(-15,15);x.quadraticCurveTo(-7,24,0,24);x.quadraticCurveTo(7,24,15,15);x.lineTo(12,10);x.lineTo(18,5);x.lineTo(22,15);x.quadraticCurveTo(10,25,0,24);x.quadraticCurveTo(-10,25,-22,15);x.fill();
@@ -525,6 +546,25 @@ roomDoors.forEach(g=>drawDoor(g,false));
  drawDoor(g,true);
 });bodies.forEach(q=>drawBody(q));ejections.forEach(e=>drawEjection(e));
  if(player.alive)person({...player,name:'YOU'});
+ drawMinimap();
+}
+function drawMinimap(){
+ const mw=Math.min(190,Math.max(150,W*.43)),mh=124,ox=12,oy=H-mh-12;
+ x.save();
+ x.fillStyle='rgba(2,10,16,.9)';x.beginPath();x.roundRect(ox,oy,mw,mh,10);x.fill();
+ x.strokeStyle='#68818c';x.lineWidth=1.5;x.stroke();
+ x.fillStyle='#c9e8f2';x.font='800 10px system-ui';x.textAlign='left';x.textBaseline='top';x.fillText('SHIP MAP',ox+8,oy+6);
+ const bx=ox+8,by=oy+22,bw=mw-16,bh=mh-30;
+ const wx=v=>bx+(v+1100)/2150*bw,wy=v=>by+(v+620)/1240*bh;
+ x.fillStyle='#142730';x.fillRect(bx,by,bw,bh);
+ rooms.forEach(r=>{
+  x.fillStyle='#29434f';x.fillRect(wx(r.x),wy(r.y),(r.w/2150)*bw,(r.h/1240)*bh);
+  x.strokeStyle='#8aa5b0';x.lineWidth=.7;x.strokeRect(wx(r.x),wy(r.y),(r.w/2150)*bw,(r.h/1240)*bh);
+ });
+ npcs.forEach(q=>{if(q.alive){x.fillStyle=q.color;x.beginPath();x.arc(wx(q.x),wy(q.y),2.2,0,Math.PI*2);x.fill()}});
+ Object.values(remotePlayers).forEach(q=>{if(q.id!==myPlayerId&&q.alive!==false){x.fillStyle=q.color||'#b5dce8';x.beginPath();x.arc(wx(q.x),wy(q.y),2.2,0,Math.PI*2);x.fill()}});
+ if(player.alive){x.fillStyle='#fff';x.strokeStyle='#00d9ff';x.lineWidth=2;x.beginPath();x.arc(wx(player.x),wy(player.y),3.6,0,Math.PI*2);x.fill();x.stroke()}
+ x.restore();
 }
 function distXY(a,b){return Math.hypot(a.x-b[0],a.y-b[1])}
 function setLog(s){document.getElementById('log').textContent=s}
@@ -742,7 +782,7 @@ if(activeTask&&taskStage>=3){done++;activeTask=null;taskStage=0;document.getElem
  if(isHost&&aiTimer%6===0)broadcastState();draw();requestAnimationFrame(update)
 }
 c.addEventListener('pointerdown',e=>{if(ended||meeting)return;drag=true;last={x:e.clientX,y:e.clientY}});
-c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;const nx=Math.max(-1080,Math.min(980,player.x+dx*.52)),ny=Math.max(-580,Math.min(580,player.y+dy*.52));if(canMoveTo(player.x,player.y,nx,ny)){player.x=nx;player.y=ny}cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
+c.addEventListener('pointermove',e=>{if(!drag||!player.alive)return;let dx=e.clientX-last.x,dy=e.clientY-last.y;const nx=Math.max(-1080,Math.min(980,player.x+dx*.7)),ny=Math.max(-580,Math.min(580,player.y+dy*.7));if(canMoveTo(player.x,player.y,nx,ny)){player.x=nx;player.y=ny}cam.x=player.x;cam.y=player.y;last={x:e.clientX,y:e.clientY}});
 c.addEventListener('pointerup',()=>drag=false);c.addEventListener('pointercancel',()=>drag=false);
 updateRoleUI();
 update();
