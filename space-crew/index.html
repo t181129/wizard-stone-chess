@@ -228,11 +228,15 @@ function canMoveTo(fromX,fromY,toX,toY){
  if(closedDoorPathHit(fromX,fromY,toX,toY))return false;
  if(!canMoveAroundProps(fromX,fromY,toX,toY))return false;
  if(from===to)return true;
- if(nearRoomDoor(fromX,fromY)||nearRoomDoor(toX,toY))return true;
- const steps=8;
- for(let i=1;i<=steps;i++){
-   const t=i/steps,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
-   if(nearRoomDoor(px,py))return true;
+ // 部屋の壁は通り抜け不可。移動線が「出発側または到着側の部屋専用ドア」を通る時だけ境界を越えられる。
+ const fromDoor=from?roomDoors[rooms.indexOf(from)]:null;
+ const toDoor=to?roomDoors[rooms.indexOf(to)]:null;
+ const relevant=[fromDoor,toDoor].filter(Boolean);
+ if(!relevant.length)return false;
+ const steps=20;
+ for(let i=0;i<=steps;i++){
+  const t=i/steps,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
+  if(relevant.some(g=>px>=g.x-14&&px<=g.x+g.w+14&&py>=g.y-14&&py<=g.y+g.h+14))return true;
  }
  return false;
 }
