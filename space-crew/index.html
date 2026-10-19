@@ -238,24 +238,23 @@ function canMoveTo(fromX,fromY,toX,toY){
   }
   return false;
  };
- // 体全体がどれかの部屋内に収まっていれば、通常の室内移動は許可。
- if(rooms.some(r=>fullInside(toX,toY,r)))return true;
+ const from=roomAt(fromX,fromY),to=roomAt(toX,toY);
+ const fullRoom=rooms.find(r=>fullInside(toX,toY,r)&&roomAt(toX,toY)===r)||null;
+ // 同じ部屋の中で、体全体が収まる範囲の移動だけはそのまま許可。
+ if(from&&from===to&&fullRoom===from)return true;
  // 部屋の壁に体がかかる位置は、対応するドアを通る時だけ許可する。
  for(const r of rooms){
   if(overlaps(toX,toY,r)&&!fullInside(toX,toY,r)){
    if(!pathUsesDoor(r)&&!nearDoor(toX,toY,roomDoors[rooms.indexOf(r)]))return false;
   }
  }
- // 部屋と重ならない通路上の移動は許可。部屋から部屋への移動はドア経由のみ。
- const from=roomAt(fromX,fromY),to=roomAt(toX,toY);
- if(from===to)return true;
+ // 部屋へ入る場合は、その部屋のドアを経由。別室へ移る場合は両方のドアを経由する。
  const relevant=[from,to].filter(Boolean).map(r=>roomDoors[rooms.indexOf(r)]).filter(Boolean);
- if(!relevant.length)return !rooms.some(r=>overlaps(toX,toY,r));
- for(let i=0;i<=24;i++){
-  const t=i/24,px=fromX+(toX-fromX)*t,py=fromY+(toY-fromY)*t;
-  if(relevant.some(g=>nearDoor(px,py,g)))return true;
- }
- return false;
+ if(fullRoom&&fullRoom!==from&&!pathUsesDoor(fullRoom))return false;
+ if(from&&to&&from!==to&&(!pathUsesDoor(from)||!pathUsesDoor(to)))return false;
+ if(!from&&!to)return !rooms.some(r=>overlaps(toX,toY,r));
+ if(!relevant.length)return false;
+ return relevant.every(g=>pathUsesDoor(rooms[roomDoors.indexOf(g)]));
 }
 function roomOf(q){
  // 見た目の体全体が部屋の内側に収まっている時だけ、その部屋にいると判定する。
